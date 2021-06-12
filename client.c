@@ -24,7 +24,7 @@ struct message
   char* dirname;
 };*/
 
-void execute_command(int opt, char* argv[], char* optarg);
+extern void execute_command(int opt, char* argv[], char* optarg);
 int write_dir(dirname, n);
 char* find_dir(char* argv[], char* optind);
 
