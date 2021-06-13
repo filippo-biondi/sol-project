@@ -7,7 +7,6 @@ struct firstmessage
 
 int fd_skt;
 struct sockaddr_un sa;
-sa.sun_family = AF_UNIX;
 int connected = 0;
 
 int openConnection(const char* sockname, int msec, const struct timespec abstime)
@@ -15,7 +14,7 @@ int openConnection(const char* sockname, int msec, const struct timespec abstime
   struct timespec curr_time;
   struct timespec wait_time;
   
-  
+  sa.sun_family = AF_UNIX;
   strncopy(sa.sun_path, sockname, MAX_SKTNAME_LEN);
   if((fd_skt = soket(AF_UNIX, SOCK_STREAM, 0)) == -1)
   {
