@@ -1,6 +1,13 @@
 #if !defined(_I_CONN)
 #define _I_CONN
 
+#define SEND_FIRST_MESSAGE(message)                                                      \
+if(write(fd_skt, &message, sizeof(struct firstmessage)) !=  sizeof(struct firstmessage)) \
+    {                                                                                    \
+      errno = ECOMM;                                                                     \
+      return -1;                                                                         \
+    }                                                                                    \
+
 int openConnection(const char* sockname, int msec, const struct timespec abstime);
 int closeConnection(const char* sockname);
 int openFile(const char* pathname, int flags);
