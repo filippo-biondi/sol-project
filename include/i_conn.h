@@ -7,6 +7,20 @@ if(write(fd_skt, &message, sizeof(struct firstmessage)) !=  sizeof(struct firstm
       errno = ECOMM;                                                                     \
       return -1;                                                                         \
     }                                                                                    \
+    
+#define SEND_PATHNAME(pathname)                                                                                                    \
+if(write(fd_skt, patname, srtnlen(patname, MAX_PATHNAME_LEN) * sizeof(char)) != srtnlen(patname, MAX_PATHNAME_LEN) * sizeof(char)) \
+    {                                                                                                                              \
+      errno = ECOMM;                                                                                                               \
+      return -1;                                                                                                                   \
+    }                                                                                                                              \
+
+#define READ_RESPONSE(response)                                                         \
+if(read(fd_skt, &response, sizeof(struct firstmessage)) != sizeof(struct firstmessage)) \
+    {                                                                                   \ 
+      errno = ECOMM;                                                                    \ 
+      return -1;                                                                        \ 
+    }                                                                                   \
 
 int openConnection(const char* sockname, int msec, const struct timespec abstime);
 int closeConnection(const char* sockname);
