@@ -47,6 +47,7 @@ int lockFile(const char* pathname);
 int unlockFile(const char* pathname);
 int closeFile(const char* pathname);
 int removeFile(const char* pathname);
-int writeDir(dirname, n);
+int writeDir(const char* dirname, int n, long int* nbyte);
+int writeFilefn(const char* pathname, const struct stat* info, const int typeflag, struct FTW* pathinfo);
 
 #endif
