@@ -1,3 +1,6 @@
+#include <my_lib.h>
+#include <i_conn.h>
+
 void execute_command(int opt, int argc, char* argv[])
 {
   char* filename;
