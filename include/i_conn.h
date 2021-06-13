@@ -1,6 +1,8 @@
 #if !defined(_I_CONN)
 #define _I_CONN
 
+#include <my_lib.h>
+
 #define SEND_FIRST_MESSAGE(message)                                                      \
 if(write(fd_skt, &message, sizeof(struct firstmessage)) !=  sizeof(struct firstmessage)) \
     {                                                                                    \
@@ -22,7 +24,7 @@ if(write(fd_skt, dirname, srtnlen(dirname, MAX_DIRNAME_LEN) * sizeof(char)) != s
       return -1;                                                                                                                 \
     }                                                                                                                            \
     
-#define SEND_BUF(buf, size)
+#define SEND_BUF(buf, size)           \
 if(write(fd_skt, buff, size) != size) \
     {                                 \
       errno = ECOMM;                  \
@@ -31,9 +33,9 @@ if(write(fd_skt, buff, size) != size) \
 
 #define READ_RESPONSE(response)                                                         \
 if(read(fd_skt, &response, sizeof(struct firstmessage)) != sizeof(struct firstmessage)) \
-    {                                                                                   \ 
-      errno = ECOMM;                                                                    \ 
-      return -1;                                                                        \ 
+    {                                                                                   \
+      errno = ECOMM;                                                                    \
+      return -1;                                                                        \
     }                                                                                   \
 
 int openConnection(const char* sockname, int msec, const struct timespec abstime);
