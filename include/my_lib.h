@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <sys/uio.h>
+#include <limits.h>
 
 #define CHECK_ARGC(n)\
 if(argc < n)                     \
