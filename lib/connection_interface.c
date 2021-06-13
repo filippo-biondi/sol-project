@@ -1,3 +1,40 @@
+#include <my_lib.h>
+
+#define SEND_FIRST_MESSAGE(message)                                                      \
+if(write(fd_skt, &message, sizeof(struct firstmessage)) !=  sizeof(struct firstmessage)) \
+    {                                                                                    \
+      errno = ECOMM;                                                                     \
+      return -1;                                                                         \
+    }                                                                                    \
+    
+#define SEND_PATHNAME(pathname)                                                                                                    \
+if(write(fd_skt, pathname, strnlen(pathname, PATH_MAX) * sizeof(char)) != strnlen(pathname, PATH_MAX) * sizeof(char)) \
+    {                                                                                                                              \
+      errno = ECOMM;                                                                                                               \
+      return -1;                                                                                                                   \
+    }                                                                                                                              \
+
+#define SEND_DIRNAME(dirname)                                                                                                    \
+if(write(fd_skt, dirname, strnlen(dirname, PATH_MAX) * sizeof(char)) != strnlen(dirname, PATH_MAX) * sizeof(char)) \
+    {                                                                                                                            \
+      errno = ECOMM;                                                                                                             \
+      return -1;                                                                                                                 \
+    }                                                                                                                            \
+    
+#define SEND_BUF(buf, size)           \
+if(write(fd_skt, buf, size) != size) \
+    {                                 \
+      errno = ECOMM;                  \
+      return -1;                      \
+    }                                 \
+
+#define READ_RESPONSE(response)                                                         \
+if(read(fd_skt, &response, sizeof(struct firstmessage)) != sizeof(struct firstmessage)) \
+    {                                                                                   \
+      errno = ECOMM;                                                                    \
+      return -1;                                                                        \
+    } 
+
 struct firstmessage
 {
   char op;
@@ -15,8 +52,8 @@ int openConnection(const char* sockname, int msec, const struct timespec abstime
   struct timespec wait_time;
   
   sa.sun_family = AF_UNIX;
-  strncopy(sa.sun_path, sockname, MAX_SKTNAME_LEN);
-  if((fd_skt = soket(AF_UNIX, SOCK_STREAM, 0)) == -1)
+  strncpy(sa.sun_path, sockname, NAME_MAX);
+  if((fd_skt = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
   {
     return -1;
   }
@@ -26,11 +63,11 @@ int openConnection(const char* sockname, int msec, const struct timespec abstime
   {
     return -1;
   }
-  while(timecmp(abstime, currr_time) > 0)
+  while(timecmp(abstime, curr_time) > 0)
   {
-    if(connect(fd_skt, (struct sockaddr+)&sa, sizeof(sa)) == -1)
+    if(connect(fd_skt, (struct sockaddr*)&sa, sizeof(sa)) == -1)
     {
-      nanosleep(wait_time, NULL);
+      nanosleep(&wait_time, NULL);
     }
     else
     {
@@ -44,19 +81,19 @@ int openConnection(const char* sockname, int msec, const struct timespec abstime
 
 int closeConnection(const char* sockname)
 {
-  if(sckname == NULL)
+  if(sockname == NULL)
   {
     errno = EINVAL;
     return -1;
   }
-  if(sa.path == NULL)
+  if(sa.sun_path == NULL)
   {
     errno = ENOENT;
     return -1;
   }
   if(connected)
   {
-    if(strncmp(sockname, sa.path, MAX_SKTNAME_LEN) == 0)
+    if(strncmp(sockname, sa.sun_path, NAME_MAX) == 0)
     {
      return close(fd_skt);
     }
@@ -65,7 +102,7 @@ int closeConnection(const char* sockname)
   }
   else
   {
-    errno = ENOTCONN
+    errno = ENOTCONN;
     return -1;
   }
 } 
@@ -77,13 +114,13 @@ int openFile(const char* pathname, int flags)
   if(connected)
   {
     message.op = 'o';
-    message.size1 = srtnlen(patname, MAX_PATHNAME_LEN) * sizeof(char);
+    message.size1 = strnlen(pathname, PATH_MAX) * sizeof(char);
     message.size2 = sizeof(int);
     
-    SEND_FIRST_MESSAGE(message);
-    SEND_PATHNAME(pathname);
+    SEND_FIRST_MESSAGE(message)
+    SEND_PATHNAME(pathname)
     
-    if(write(fd_skt, &flags, sizeof(int))) != sizeof(int))
+    if(write(fd_skt, &flags, sizeof(int)) != sizeof(int))
     {
       errno = ECOMM;
       return -1;
@@ -108,7 +145,7 @@ int openFile(const char* pathname, int flags)
   }
   else
   {
-    errno = ENOTCONN
+    errno = ENOTCONN;
     return -1;
   }
 }
@@ -119,7 +156,7 @@ int readFile(const char* pathname, void** buf, size_t* size)
   if(connected)
   {
     message.op = 'r';
-    message.size1 = srtnlen(patname, MAX_PATHNAME_LEN) * sizeof(char);
+    message.size1 = strnlen(pathname, PATH_MAX) * sizeof(char);
     message.size2 = 0;
     SEND_FIRST_MESSAGE(message)
     SEND_PATHNAME(pathname)
@@ -132,7 +169,7 @@ int readFile(const char* pathname, void** buf, size_t* size)
         return -1;
       case 'y':
         *size = response.size1;
-        if((**buff = malloc(*size)) == NULL)
+        if((*buf = malloc(*size)) == NULL)
         {
           errno = ENOMEM;
           return -1;
@@ -162,7 +199,7 @@ int readNFiles(int N, const char* dirname)
   {
     message.op = 'R';
     message.size1 = sizeof(int);
-    message.size2 = srtnlen(dirname, MAX_DIRNAME_LEN) * sizeof(char);
+    message.size2 = strnlen(dirname, PATH_MAX) * sizeof(char);
     SEND_FIRST_MESSAGE(message)
     SEND_DIRNAME(dirname)
     READ_RESPONSE(response)
@@ -189,7 +226,7 @@ int writeFile(const char* pathname, const char* dirname)
   if(connected)
   {
     message.op = 'w';
-    message.size1 = srtnlen(patname, MAX_PATHNAME_LEN) * sizeof(char);
+    message.size1 = strnlen(pathname, PATH_MAX) * sizeof(char);
     message.size2 = 0;
     SEND_FIRST_MESSAGE(message)
     SEND_PATHNAME(pathname)
@@ -220,7 +257,7 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
   if(connected)
   {
     message.op = 'a';
-    message.size1 = srtnlen(patname, MAX_PATHNAME_LEN) * sizeof(char);
+    message.size1 = strnlen(pathname, PATH_MAX) * sizeof(char);
     message.size2 = size;
     SEND_FIRST_MESSAGE(message)
     SEND_PATHNAME(pathname)
@@ -251,7 +288,7 @@ int lockFile(const char* pathname)
   if(connected)
   {
     message.op = 'l';
-    message.size1 = srtnlen(patname, MAX_PATHNAME_LEN) * sizeof(char);
+    message.size1 = strnlen(pathname, PATH_MAX) * sizeof(char);
     message.size2 = 0;
     SEND_FIRST_MESSAGE(message)
     SEND_PATHNAME(pathname)
@@ -281,7 +318,7 @@ int unlockFile(const char* pathname)
   if(connected)
   {
     message.op = 'u';
-    message.size1 = srtnlen(patname, MAX_PATHNAME_LEN) * sizeof(char);
+    message.size1 = strnlen(pathname, PATH_MAX) * sizeof(char);
     message.size2 = 0;
     SEND_FIRST_MESSAGE(message)
     SEND_PATHNAME(pathname)
@@ -311,7 +348,7 @@ int closeFile(const char* pathname)
   if(connected)
   {
     message.op = 'c';
-    message.size1 = srtnlen(patname, MAX_PATHNAME_LEN) * sizeof(char);
+    message.size1 = strnlen(pathname, PATH_MAX) * sizeof(char);
     message.size2 = 0;
     SEND_FIRST_MESSAGE(message)
     SEND_PATHNAME(pathname)
@@ -341,7 +378,7 @@ int removeFile(const char* pathname)
   if(connected)
   {
     message.op = 'd';
-    message.size1 = srtnlen(patname, MAX_PATHNAME_LEN) * sizeof(char);
+    message.size1 = strnlen(pathname, PATH_MAX) * sizeof(char);
     message.size2 = 0;
     SEND_FIRST_MESSAGE(message)
     SEND_PATHNAME(pathname)
