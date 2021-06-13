@@ -1,4 +1,4 @@
-void execute_command(int opt, char* argv[], char* optarg, char* optind)
+void execute_command(int opt, int argc, char* argv[], char* optarg, char* optind)
 {
   char* filename;
   char* dirname;
@@ -13,10 +13,10 @@ void execute_command(int opt, char* argv[], char* optarg, char* optind)
       char nstring;
       long int nw;
       dirname = strtok(dirname, ',');
-      if((nstring = strtok(NULL, ',')= != NULL && nstring[0] == 'n' && nstring[1] == '=')
+      if((nstring = strtok(NULL, ',')) != NULL && nstring[0] == 'n' && nstring[1] == '=')
       {
         n = strtol(&(nstring[2]), &endptr, 10);
-        if(nstring[2] == '\0' || **endptr != '\0')
+        if(nstring[2] == '\0' || **endptr != '\0' || n < 0)
         {
           n = 0;
           PRINT_OPERATION("Invalid number as argument of -w, default n=0 value used\n")
@@ -52,7 +52,7 @@ void execute_command(int opt, char* argv[], char* optarg, char* optind)
     case 'r':
       char* buf;
       int fd;
-      if((dirname = find_dir(argv, optind)) == NULL)
+      if((dirname = find_dir(argc, argv, optind)) == NULL)
       {
         PRINT_OPERATION("No -d option related with -r option")
         break;
