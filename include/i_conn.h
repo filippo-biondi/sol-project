@@ -15,6 +15,13 @@ if(write(fd_skt, patname, srtnlen(patname, MAX_PATHNAME_LEN) * sizeof(char)) != 
       return -1;                                                                                                                   \
     }                                                                                                                              \
 
+#define SEND_DIRNAME(dirname)                                                                                                    \
+if(write(fd_skt, dirname, srtnlen(dirname, MAX_DIRNAME_LEN) * sizeof(char)) != srtnlen(dirname, MAX_DIRNAME_LEN) * sizeof(char)) \
+    {                                                                                                                            \
+      errno = ECOMM;                                                                                                             \
+      return -1;                                                                                                                 \
+    }                                                                                                                            \
+
 #define READ_RESPONSE(response)                                                         \
 if(read(fd_skt, &response, sizeof(struct firstmessage)) != sizeof(struct firstmessage)) \
     {                                                                                   \ 
