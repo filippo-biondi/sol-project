@@ -2,11 +2,12 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
-#include <assert.h>
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <sys/uio.h>
 #include <limits.h>
+
+#define PRINT_USAGE printf("Usage to be added!!!!!");
 
 #define PRINT_OPERATION(...) \
 if(print_operation)          \
@@ -20,7 +21,7 @@ if(print_operation)        \
   perror(str);             \
 }                          \
 
-#define CHECK_ARGC(n)\
+#define CHECK_ARGC(n)            \
 if(argc < n)                     \
 {                                \
   printf("Invalid arguments\n"); \
