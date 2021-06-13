@@ -103,6 +103,10 @@ int main(int argc, char* argv[])
     execute_command(opt, argv, optarg);
     nanosleep(sleeptime, NULL);
   }
+  if(closeConnection(socket_name) == 0)
+  {
+    PRINT_OPERATION("Connection successfully closed \n")
+  }
   free(soket_name);
   return 0;
 }
