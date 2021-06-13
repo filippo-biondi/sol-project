@@ -8,6 +8,18 @@
 #include <sys/uio.h>
 #include <limits.h>
 
+#define PRINT_OPERATION(...) \
+if(print_operation)          \
+{                            \
+  printf(__VA_ARGS__);       \
+}                            \
+
+PRINT_OPERATION_ERROR(str) \
+if(print_operation)        \
+{                          \
+  perror(str);             \
+}                          \
+
 #define CHECK_ARGC(n)\
 if(argc < n)                     \
 {                                \
