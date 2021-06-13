@@ -1,10 +1,6 @@
 #include <my_lib.h>
-
-#define MAX_FILE_NO 50 
-#define MSEC 10
-#define MAX_WAIT_TIME 10
-
-extern void execute_command(int opt, char* argv[], char* optarg);
+#include <i_conn.h>
+extern void execute_command(int opt, int argc, char* argv[]);
 
 int print_operation = 0;
 
@@ -16,7 +12,6 @@ int main(int argc, char* argv[])
   char* endptr;
   struct timespec abstime;
   struct timespec sleeptime;
-  Filename_nodePtr file_list = NULL;
   char* socket_name;
   for(int i=1; i < argc; i++)
   {
@@ -34,7 +29,7 @@ int main(int argc, char* argv[])
       if(argv[i+1] != NULL && argv[i+1][0] != '-')
       {
         t = strtol(argv[i+1], &endptr, 10);
-        if(argv[i+1] == '\0' || **endptr != '\0')
+        if(argv[i+1][0] == '\0' || *endptr != '\0')
         {
           t = 0;
           PRINT_OPERATION("Invalid argument t, default t=0 setted\n")
@@ -60,7 +55,7 @@ int main(int argc, char* argv[])
         printf("Too many socket name specified\n");
         PRINT_USAGE
         return 0;
-      }message
+      }
     }
   }
   
@@ -78,13 +73,13 @@ int main(int argc, char* argv[])
   while(opt != -1)
   {
     execute_command(opt, argc, argv);
-    nanosleep(sleeptime, NULL);
+    nanosleep(&sleeptime, NULL);
     opt = getopt(argc, argv, ":w:W:r:R::d:D:l:u:c:fhtp");
   }
   if(closeConnection(socket_name) == 0)
   {
     PRINT_OPERATION("Connection successfully closed \n")
   }
-  free(soket_name);
+  free(socket_name);
   return 0;
 }
