@@ -20,3 +20,5 @@ if((ptr = malloc(bytes)) == NULL) \
   perror("Malloc error");         \
   exit(EXIT_FAILURE);             \
 }                                 \
+
+int timecmp(timespec t1, timespec t2);
