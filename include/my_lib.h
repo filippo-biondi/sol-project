@@ -7,6 +7,8 @@
 #include <sys/uio.h>
 #include <limits.h>
 
+#define MAX_OPEN_DIR 15
+
 #define PRINT_USAGE printf("Usage to be added!!!!!");
 
 #define PRINT_OPERATION(...) \
