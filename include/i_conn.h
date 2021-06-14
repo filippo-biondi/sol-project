@@ -1,7 +1,10 @@
 #if !defined(_I_CONN)
 #define _I_CONN
 
-#include <my_lib.h>
+#include <utils.h>
+
+#define O_CREATE 10
+#define O_LOCK 11
 
 #define SEND_FIRST_MESSAGE(message)                                                      \
 if(write(fd_skt, &message, sizeof(struct firstmessage)) !=  sizeof(struct firstmessage)) \
@@ -11,21 +14,21 @@ if(write(fd_skt, &message, sizeof(struct firstmessage)) !=  sizeof(struct firstm
     }                                                                                    \
     
 #define SEND_PATHNAME(pathname)                                                                                                    \
-if(write(fd_skt, patname, srtnlen(patname, MAX_PATHNAME_LEN) * sizeof(char)) != srtnlen(patname, MAX_PATHNAME_LEN) * sizeof(char)) \
+if(write(fd_skt, pathname, strnlen(pathname, PATH_MAX) * sizeof(char)) != strnlen(pathname, PATH_MAX) * sizeof(char)) \
     {                                                                                                                              \
       errno = ECOMM;                                                                                                               \
       return -1;                                                                                                                   \
     }                                                                                                                              \
 
 #define SEND_DIRNAME(dirname)                                                                                                    \
-if(write(fd_skt, dirname, srtnlen(dirname, MAX_DIRNAME_LEN) * sizeof(char)) != srtnlen(dirname, MAX_DIRNAME_LEN) * sizeof(char)) \
+if(write(fd_skt, dirname, strnlen(dirname, PATH_MAX) * sizeof(char)) != strnlen(dirname, PATH_MAX) * sizeof(char)) \
     {                                                                                                                            \
       errno = ECOMM;                                                                                                             \
       return -1;                                                                                                                 \
     }                                                                                                                            \
     
 #define SEND_BUF(buf, size)           \
-if(write(fd_skt, buff, size) != size) \
+if(write(fd_skt, buf, size) != size) \
     {                                 \
       errno = ECOMM;                  \
       return -1;                      \
@@ -36,7 +39,7 @@ if(read(fd_skt, &response, sizeof(struct firstmessage)) != sizeof(struct firstme
     {                                                                                   \
       errno = ECOMM;                                                                    \
       return -1;                                                                        \
-    }                                                                                   \
+    }                                                                                    \
 
 int openConnection(const char* sockname, int msec, const struct timespec abstime);
 int closeConnection(const char* sockname);
@@ -49,7 +52,6 @@ int lockFile(const char* pathname);
 int unlockFile(const char* pathname);
 int closeFile(const char* pathname);
 int removeFile(const char* pathname);
-int writeDir(const char* dirname, int n, long int* nbyte);
-int writeFilefn(const char* pathname, const struct stat* info, const int typeflag, struct FTW* pathinfo);
+int timecmp(struct timespec t1, struct timespec t2);
 
 #endif
