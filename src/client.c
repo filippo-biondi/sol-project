@@ -1,4 +1,4 @@
-#include <my_lib.h>
+#include <utils.h>
 #include <i_conn.h>
 extern void execute_command(int opt, int argc, char* argv[]);
 
@@ -12,7 +12,7 @@ int main(int argc, char* argv[])
   char* endptr;
   struct timespec abstime;
   struct timespec sleeptime;
-  char* socket_name;
+  char* socket_name = NULL;
   for(int i=1; i < argc; i++)
   {
     if(strcmp("-h", argv[i]) == 0)
@@ -46,9 +46,19 @@ int main(int argc, char* argv[])
     {
       if(socket_name == NULL)
       {
-        MALLOC(socket_name, strnlen(argv[i+1], NAME_MAX) + 1)
-        strncpy(socket_name, argv[i+1], NAME_MAX);
-        socket_name[NAME_MAX] = '\0';
+        if(i != argc-1)
+        {
+          size_t socket_len = strnlen(argv[i+1], NAME_MAX) + 1;
+          MALLOC(socket_name, socket_len)
+          strncpy(socket_name, argv[i+1], socket_len);
+          socket_name[socket_len - 1] = '\0';
+        }
+        else
+        {
+          printf("No socket name specified\n");
+          PRINT_USAGE
+          return 0;
+        }
       }
       else
       {
@@ -58,18 +68,19 @@ int main(int argc, char* argv[])
       }
     }
   }
-  
+  printf("Trying connect on %s socket\n", socket_name);
+  fflush(stdout);
   clock_gettime(CLOCK_REALTIME, &abstime);
   abstime.tv_sec += MAX_WAIT_TIME;
   if(openConnection(socket_name, MSEC, abstime) == -1)
   {
     perror("Connection failed");
-    exit(EXIT_FAILURE);
+    //exit(EXIT_FAILURE);
   }
   PRINT_OPERATION("Connection opened on socket %s\n", socket_name)
   
   int opt;
-  opt = getopt(argc, argv, "w:W:r:R::d:D:l:u:c:fhtp");
+  opt = getopt(argc, argv, "-:w:W:r:Rd:D:l:u:c:fhtp");
   while(opt != -1)
   {
     execute_command(opt, argc, argv);
