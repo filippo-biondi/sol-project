@@ -1,6 +1,7 @@
 #include <utils.h>
 #include <i_conn.h>
 #include <conn_supp.h>
+
 long int nbyte_read = 0;
 long int nwrite = 0;
 long int nwrite_tried = 0;
@@ -54,17 +55,17 @@ int find(int argc, char* argv[], int optind, char* s)
   return -1;
 }
 
-char* get_path(char* dirname, char* filename)
+char* get_path(const char* dirname, char* filename)
 {
   char* path;
-  if((path = malloc((strlen(dirname) + strlen(filename) + 2) * sizeof(char))) == NULL)
+  char* name = basename(filename);
+  if((path = malloc((strlen(dirname) + strlen(name) + 2) * sizeof(char))) == NULL)
   {
     errno = ENOMEM;
     return NULL;
   }
   strcpy(path, dirname);
-  path[strlen(dirname)] = '/';
-  path[strlen(dirname) + 1] = '\0';
-  strcat(path, filename);
+  strcat(path, "/");
+  strcat(path, name);
   return path;
 }

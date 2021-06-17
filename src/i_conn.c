@@ -92,7 +92,7 @@ int openFile(const char* pathname, int flags)
   if(connected)
   {
     message.op = 'o';
-    message.size1 = strnlen(pathname, PATH_MAX) * sizeof(char);
+    message.size1 = (strnlen(pathname, PATH_MAX-1) + 1) * sizeof(char);
     message.size2 = sizeof(int);
     
     SEND_FIRST_MESSAGE(message)
@@ -134,7 +134,7 @@ int readFile(const char* pathname, void** buf, size_t* size)
   if(connected)
   {
     message.op = 'r';
-    message.size1 = strnlen(pathname, PATH_MAX) * sizeof(char);
+    message.size1 = (strnlen(pathname, PATH_MAX-1) + 1) * sizeof(char);
     message.size2 = 0;
     SEND_FIRST_MESSAGE(message)
     SEND_PATHNAME(pathname)
@@ -157,6 +157,8 @@ int readFile(const char* pathname, void** buf, size_t* size)
           errno = ECOMM;
           return -1;
         }
+        return 0;
+        
       default:
         errno = ECOMM;
         return -1;
@@ -171,20 +173,65 @@ int readFile(const char* pathname, void** buf, size_t* size)
 
 int readNFiles(int N, const char* dirname)
 {
+  size_t len_path;
+  size_t len_buf;
+  char* path;
+  void* buf;
+  int files_read = 0;
+  int save_err = 0;
   struct firstmessage message;
   struct firstmessage response;
   if(connected)
   {
     message.op = 'R';
     message.size1 = sizeof(int);
-    message.size2 = strnlen(dirname, PATH_MAX) * sizeof(char);
+    message.size2 = 0;
     SEND_FIRST_MESSAGE(message)
-    SEND_DIRNAME(dirname)
+    if(write(fd_skt, &N, sizeof(int)) != sizeof(int)) 
+    {                                 
+      errno = ECOMM;                  
+      return -1;                      
+    }
     READ_RESPONSE(response)
     switch(response.op)
     {
       case 'y':
-        return 0;
+        if(read(fd_skt, &len_path, sizeof(size_t)) != sizeof(size_t) || read(fd_skt, &len_buf, sizeof(size_t)) != sizeof(size_t))
+        {
+          errno = ECOMM;
+          return -1;
+        }
+        while(len_buf != 0)
+        {
+          if((path = malloc(len_path)) == NULL || (buf = malloc(len_buf)) == NULL)
+          {
+            return -1;
+          }
+          if(read(fd_skt, path, len_path) != len_path || read(fd_skt, buf, len_buf) != len_buf)
+          {
+            errno = ECOMM;
+            return -1;
+          }
+          files_read++;
+          if(dirname != NULL && saveInDir(dirname, path, buf, len_buf) == -1)
+          {
+            save_err = 1;
+          }
+          free(path);
+          free(buf);
+          
+          if(read(fd_skt, &len_path, sizeof(size_t)) != sizeof(size_t) || read(fd_skt, &len_buf, sizeof(size_t)) != sizeof(size_t))
+          {
+            errno = ECOMM;
+            return -1;
+          }
+        }
+
+        if(save_err == 1)
+        {
+          return -1;
+        }
+        return files_read;
       default:
         errno = ECOMM;
         return -1;
@@ -204,10 +251,21 @@ int writeFile(const char* pathname, const char* dirname)
   if(connected)
   {
     message.op = 'w';
-    message.size1 = strnlen(pathname, PATH_MAX) * sizeof(char);
-    message.size2 = 0;
+    message.size1 = (strnlen(pathname, PATH_MAX-1) + 1) * sizeof(char);
+    if(dirname == NULL)
+    { 
+      message.size2 = 0;
+    }
+    else
+    {
+      message.size2 = (strnlen(dirname, PATH_MAX-1) + 1) * sizeof(char);
+    }
     SEND_FIRST_MESSAGE(message)
     SEND_PATHNAME(pathname)
+    if(dirname != NULL)
+    {
+      SEND_DIRNAME(dirname)
+    }
     READ_RESPONSE(response)
     switch(response.op)
     {
@@ -235,11 +293,16 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
   if(connected)
   {
     message.op = 'a';
-    message.size1 = strnlen(pathname, PATH_MAX) * sizeof(char);
+    message.size1 = (strnlen(pathname, PATH_MAX-1) + 1) * sizeof(char);
     message.size2 = size;
     SEND_FIRST_MESSAGE(message)
     SEND_PATHNAME(pathname)
     SEND_BUF(buf, size)
+    if(dirname != NULL)
+    {
+      SEND_DIRNAME(dirname)
+    }
+    
     READ_RESPONSE(response)
     switch(response.op)
     {
@@ -266,7 +329,7 @@ int lockFile(const char* pathname)
   if(connected)
   {
     message.op = 'l';
-    message.size1 = strnlen(pathname, PATH_MAX) * sizeof(char);
+    message.size1 = (strnlen(pathname, PATH_MAX-1) + 1) * sizeof(char);
     message.size2 = 0;
     SEND_FIRST_MESSAGE(message)
     SEND_PATHNAME(pathname)
@@ -296,7 +359,7 @@ int unlockFile(const char* pathname)
   if(connected)
   {
     message.op = 'u';
-    message.size1 = strnlen(pathname, PATH_MAX) * sizeof(char);
+    message.size1 = (strnlen(pathname, PATH_MAX-1) + 1) * sizeof(char);
     message.size2 = 0;
     SEND_FIRST_MESSAGE(message)
     SEND_PATHNAME(pathname)
@@ -326,7 +389,7 @@ int closeFile(const char* pathname)
   if(connected)
   {
     message.op = 'c';
-    message.size1 = strnlen(pathname, PATH_MAX) * sizeof(char);
+    message.size1 = (strnlen(pathname, PATH_MAX-1) + 1) * sizeof(char);
     message.size2 = 0;
     SEND_FIRST_MESSAGE(message)
     SEND_PATHNAME(pathname)
@@ -356,7 +419,7 @@ int removeFile(const char* pathname)
   if(connected)
   {
     message.op = 'd';
-    message.size1 = strnlen(pathname, PATH_MAX) * sizeof(char);
+    message.size1 = (strnlen(pathname, PATH_MAX-1) + 1) * sizeof(char);
     message.size2 = 0;
     SEND_FIRST_MESSAGE(message)
     SEND_PATHNAME(pathname)
@@ -378,4 +441,30 @@ int removeFile(const char* pathname)
     errno = ENOTCONN;
     return -1;
   }
+}
+
+int saveInDir(const char* dirname, char* filename, void* buf, size_t size)
+{
+  char* complete_path;
+  int fd;
+  if((complete_path = get_path(dirname, filename)) == NULL)
+  {
+    return -1;
+  }
+  if((fd = open(complete_path, O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU | S_IRWXO)) == -1)
+  {
+    free(complete_path);
+    return -1;
+  }
+  if(write(fd, buf, size) != size)
+  {
+    free(complete_path);
+    return -1;
+  }
+  if(close(fd) == -1)
+  {
+    free(complete_path);
+    return -1;
+  }
+  return 0;
 }

@@ -1,106 +1,91 @@
-#include <utils.h>
-#include <pthread.h>
-#include <sys/select.h>
-#include <shared_queue.h>
+#include <server_op.h>
 
-#define MUTEX_INT(mutex) \
-if(pthread_mutex_init(&(mutex), NULL) != 0) \
-  {                                       \
-    perror("Mutex initalization error");  \
-    exit(EXIT_FAILURE);                   \
-  }                                       \
+SharedQueue work_queue;
+int pipe_fd;
 
-struct saved_file
-{
-  char* name;
-  void* buf;
-  int locked;
-  waitng_queue;
-};
+long int max_storage = 100000000;
+int max_n_file = 100;
 
-struct shared_state
-{
-  int n_worker = 10;
-  long int max_storage = 100000000;
-  int max_n_file = 100;
-  
-  int max_reached_storage = 0;
-  long int max_reached_n_file = 0;
-  int n_replacement = 0;
-  
-  long int used_storage = 0;
-  int n_saved_file;
-  pthread_mutex_lock mutex;
-  
-  SharedQueue work_queue;
-  int pipe_fd;
-};
-
-
+int fd_max;
 
 extern void* worker_routine(void* arg);
 
 int main(int argc, char* argv[])
 {
-
-  struct shared_state param;
+  int n_worker = 10;
+  
+  struct storage files;
   char* socket_name;
   int fd_skt;
   struct sockaddr_un sa;
-  fd_set set
+  fd_set set;
   fd_set tmpset;
-  int fd_max;
   int fd;
   int* fdPtr;
   int pipeFd[2];
   FILE* config;
+  int n_buckets;
   
   if(argc > 2)
   {
-    printf("Invalid arguments\n")
+    printf("Invalid arguments\n");
     return 0;
   }
   
   if(argc == 2)
   {
-    if((fd_config = fopen(argv[1], "r")) == NULL)
+    if((config = fopen(argv[1], "r")) == NULL)
     {
       perror("Error in config file opening, default values used");
     }
-    if(fscanf("N_WORKER=%d", &param.n_worker) != 1)
+    else
     {
-      perror("Error in config file reading, default values for N_WORKER used");
-    }
-    if(fscanf("MAX_STORAGE=%Ld", &param.max_storage) != 1)
-    {
-      perror("Error in config file reading, default values for MAX_STORAGE used");
-    }
-    if(fscanf("MAX_N_FILE=%d", &param.max_n_file) != 1)
-    {
-      perror("Error in config file reading, default values for MAX_N_FILE used");
-    }
-    MALLOC(param.socket_name, NAME_MAX+1)
-    if(fscanf("SOCKET_NAME=%s", param.socket_name) != 1)
-    {
-      strcpy(socket_name, "socket");
-      perror("Error in config file reading, default values for SOCKET NAME used");
+      if(fscanf(config, "N_WORKER = %d", &n_worker) != 1)
+      {
+        perror("Error in config file reading, default values for N_WORKER used");
+      }
+      fscanf(config, "%*c");
+      if(fscanf(config, "MAX_STORAGE = %ld", &max_storage) != 1)
+      {
+        perror("Error in config file reading, default values for MAX_STORAGE used");
+      }
+      fscanf(config, "%*c");
+      if(fscanf(config, "MAX_N_FILE = %d", &max_n_file) != 1)
+      {
+        perror("Error in config file reading, default values for MAX_N_FILE used");
+      }
+      fscanf(config, "%*c");
+      if(fscanf(config, "N_BUCKETS = %d", &n_buckets) != 1)
+      {
+        n_buckets = 2 * max_n_file;
+        perror("Error in config file reading, default values for N_BUCKETS used");
+      }
+      fscanf(config, "%*c");
+      MALLOC(socket_name, NAME_MAX+1)
+      if(fscanf(config, "SOCKET_NAME = %s", socket_name) != 1)
+      {
+        strcpy(socket_name, "socket");
+        perror("Error in config file reading, default values for SOCKET NAME used");
+      }
+      fscanf(config, "%*c");
     }
   }
-  MUTEX_INIT(param.mutex)
   
-  intiQueue(&(param.work_queue);
+  initStorage(&files, n_buckets);
+  
+  initQueue(&work_queue);
   
   if(pipe(pipeFd) == -1)
   {
     perror("Error in pipe creating");
     exit(EXIT_FAILURE);
   }
-  param.pipe_fd = pipeFd[1];
+  pipe_fd = pipeFd[1];
   
-  pthread_t workers[param.n_worker];
+  pthread_t workers[n_worker];
   for(int i=0; i < n_worker; i++)
   {
-    if(pthread_create(&(workers[i]), NULL, worker_routine, &param) != 0)
+    if(pthread_create(&(workers[i]), NULL, worker_routine, &files) != 0)
     {
       perror("Error in creating pool thread");
       if(i == 0)
@@ -116,7 +101,7 @@ int main(int argc, char* argv[])
     }
   }
   
-  strncpy(sa.sun_path, SOCKNAME, NAME_MAX);  
+  strncpy(sa.sun_path, socket_name, NAME_MAX);  
   free(socket_name);
   sa.sun_family = AF_UNIX;
   if((fd_skt = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
@@ -137,14 +122,14 @@ int main(int argc, char* argv[])
   }
   
   FD_ZERO(&set);
-  FD_ZERO(&tempset);
+  FD_ZERO(&tmpset);
   FD_SET(fd_skt, &set);
   FD_SET(pipeFd[0], &set);
   fd_max = fd_skt;
   
   while(1)
   {
-    temp_set = set;
+    tmpset = set;
     if (select(fd_max+1, &tmpset, NULL, NULL, NULL) == -1) 
     {
 	    perror("Error in select");
@@ -162,12 +147,16 @@ int main(int argc, char* argv[])
 			      exit(EXIT_FAILURE);
 		      }
 	      }
-	      else if(i = pipeFd[0])
+	      else if(i == pipeFd[0])
 	      {
 	        if(read(pipeFd[0], &fd, sizeof(int)) != sizeof(int))
 	        {
 	          perror("Error in pipe reading");
 	          exit(EXIT_FAILURE);
+	        }
+	        if(fd > fd_max)
+	        {
+	          fd_max = fd;
 	        }
 	        FD_SET(fd, &set);
 	        continue;
@@ -181,8 +170,11 @@ int main(int argc, char* argv[])
 	         
 	      MALLOC(fdPtr, sizeof(int))
 	      *fdPtr = fd;
-	      S_enqueue(&(param.worker_queue), fdPtr);
-	      
+	      if(S_enqueue(&work_queue, fdPtr))
+	      {
+	        perror("Error in worker queue");
+          exit(EXIT_FAILURE);
+	      }
 	    }
 	  }
 	}

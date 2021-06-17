@@ -10,14 +10,12 @@ void execute_command(int opt, int argc, char* argv[])
   char* dirname;
   char* abs_path = NULL;
   char* abs_dir_path = NULL;
-  char* complete_path;
   long int n = 0;
   size_t nbyte = 0;
   char* endptr;
   char* nstring;
   long int nw;
   void* buf;
-  int fd;
   int ind;
   struct stat st;
   switch(opt)
@@ -60,25 +58,7 @@ void execute_command(int opt, int argc, char* argv[])
       
     case 'W':
       filename = strtok(optarg, ",");
-      ind = find(argc, argv, optind, "-D");
-      if(ind != -1)
-      {
-        dirname = argv[ind];
-        stat(dirname, &st);
-        if(S_ISDIR(st.st_mode))
-        {      
-          CHECK_PATH(dirname)
-         if((abs_dir_path = realpath(dirname, NULL)) == NULL)
-          {
-            PRINT_OPERATION_ERROR("Error while resolving directory path")
-          }
-        }
-        else
-        {
-          errno = ENOTDIR;
-          PRINT_OPERATION_ERROR("Bad argument of -D")
-        }
-      }
+      
       while(filename != NULL)
       {
         CHECK_PATH(filename)
@@ -94,13 +74,9 @@ void execute_command(int opt, int argc, char* argv[])
         if(openFile(abs_path, O_CREATE | O_LOCK) == 0)
         {
           PRINT_OPERATION("File %s opened in the server\n", abs_path)
-          if(writeFile(abs_path, abs_dir_path) == 0)
+          if(writeFile(abs_path, NULL) == 0)
           {
             PRINT_OPERATION("File %s written in the server for a total of %ld bytes\n", abs_path, nbyte)
-            if(abs_dir_path != NULL)
-            {
-              PRINT_OPERATION("Eventualy discarded files saved in %s\n", abs_dir_path)
-            }
           }
           else
           {
@@ -122,88 +98,66 @@ void execute_command(int opt, int argc, char* argv[])
         free(abs_path);
         filename = strtok(NULL, ",");
       }
-      if(abs_dir_path != NULL)
-      {
-        free(abs_dir_path);
-      }
       break;
       
     case 'D':
       break;
       
     case 'r':
+      dirname = NULL;
+      if((ind = find(argc, argv, optind, "-d")) != -1)
+      {
+        dirname = argv[ind];
+        CHECK_PATH(dirname)
+        stat(dirname, &st);
+        if(!S_ISDIR(st.st_mode))
+        {
+          errno = ENOTDIR;
+          PRINT_OPERATION_ERROR("Bad argument of -d")
+          free(abs_dir_path);
+          break;
+        }
+      }
       
-      if((ind = find(argc, argv, optind, "-d")) == -1)
-      {
-        PRINT_OPERATION("No -d option related with -r option\n")
-        break;
-      }
-      dirname = argv[ind];
-      CHECK_PATH(dirname)
-      if(realpath(dirname, abs_dir_path) == NULL)
-      {
-        PRINT_OPERATION_ERROR("Error while resolving directory path")
-        break;
-      }
-      stat(dirname, &st);
-      if(!S_ISDIR(st.st_mode))
-      {
-        errno = ENOTDIR;
-        PRINT_OPERATION_ERROR("Bad argument of -D")
-        free(abs_dir_path);
-        break;
-      }
       filename = strtok(optarg, ",");
       while(filename != NULL)
       {
         CHECK_PATH(filename)
-        if(readFile(abs_path, &buf, &nbyte) == -1)
+        if(readFile(filename, &buf, &nbyte) == -1)
         {
           PRINT_OPERATION_ERROR("Error in reading file")
         }
         else
         {
-          PRINT_OPERATION("File %s read from the server for a total of %ld bytes\n", abs_path, nbyte)
-          if((complete_path = get_path(dirname, filename)) == NULL)
+          PRINT_OPERATION("File %s read from the server for a total of %ld bytes\n", filename, nbyte)
+          if(dirname != NULL && saveInDir(dirname, filename, buf, nbyte) == 0)
           {
-            PRINT_OPERATION_ERROR("Error while resolving path")
+            
+            PRINT_OPERATION("File saved in directory %s\n", dirname)
           }
-          CHECK_PATH(complete_path)
-          if((fd = open(complete_path, O_WRONLY | O_CREAT | O_TRUNC)) == -1)
-          {
-            PRINT_OPERATION_ERROR("I/O error in open while saving read file");
-          }
-          else
-          {
-            if(write(fd, buf, nbyte) != nbyte)
-            {
-              PRINT_OPERATION_ERROR("I/O error in write while saving read file"); 
-            }
-            if(close(fd) == -1)
-            {
-              PRINT_OPERATION_ERROR("I/O error in close while saving read file"); 
-            }
-          }
-         }
+        }
         free(abs_path);
         filename = strtok(NULL, ",");
       }
-      free(abs_dir_path);
+      if(dirname != NULL)
+      {
+        free(abs_dir_path);
+      }
       break;
     case 'R':
-      if((ind = find(argc, argv, optind, "-d")) == -1)
+      abs_dir_path = NULL;
+      if((ind = find(argc, argv, optind, "-d")) != -1)
       {
-        PRINT_OPERATION("No -d option related with -r option\n")
-        break;
+        dirname = argv[ind];
+        CHECK_PATH(dirname)
+        if((abs_dir_path = realpath(dirname, NULL)) == NULL)
+        {
+          PRINT_OPERATION_ERROR("Error while resolving directory path")
+          break;
+        }
       }
-      dirname = argv[ind];
-      CHECK_PATH(dirname)
-      if((abs_dir_path = realpath(dirname, NULL)) == NULL)
-      {
-        PRINT_OPERATION_ERROR("Error while resolving directory path")
-        break;
-      }
-      if(optind != argc -1 && argv[optind][0] != '-')
+      
+      if(optind != argc && argv[optind][0] != '-')
       {
         if(argv[optind][0] == 'n' && argv[optind][1] == '=')
         { 
@@ -215,13 +169,20 @@ void execute_command(int opt, int argc, char* argv[])
           }
         }
       }
-      if((n = readNFiles(n, abs_dir_path)) >= 0)
+      if((n = readNFiles(n, abs_dir_path)) == -1)
       {
-        PRINT_OPERATION("%ld files read from the server\n", n)
+        if(errno == EIO)
+        {
+          PRINT_OPERATION_ERROR("Error in saving files")
+        }
+        else
+        {
+          PRINT_OPERATION_ERROR("Error in reading files")
+        }
       }
       else
       {
-        PRINT_OPERATION_ERROR("Error in reading files") 
+        PRINT_OPERATION("%ld files read from server\n", n)
       }
       break;
            
@@ -236,9 +197,9 @@ void execute_command(int opt, int argc, char* argv[])
       while(filename != NULL)
       {
         CHECK_PATH(filename)
-        if(lockFile(abs_path) == 0)
+        if(lockFile(filename) == 0)
         {
-          PRINT_OPERATION("Lock acquired on file %s\n", abs_path)
+          PRINT_OPERATION("Lock acquired on file %s\n", filename)
         }
         else
         {
@@ -253,9 +214,9 @@ void execute_command(int opt, int argc, char* argv[])
       while(filename != NULL)
       {
         CHECK_PATH(filename)
-        if(unlockFile(abs_path) == 0)
+        if(unlockFile(filename) == 0)
         {
-          PRINT_OPERATION("Lock released on file %s\n", abs_path)
+          PRINT_OPERATION("Lock released on file %s\n", filename)
         }
         else
         {
@@ -270,9 +231,9 @@ void execute_command(int opt, int argc, char* argv[])
       while(filename != NULL)
       {
         CHECK_PATH(filename)
-        if(removeFile(abs_path) == 0)
+        if(removeFile(filename) == 0)
         {
-          PRINT_OPERATION("File %s removed\n", abs_path)
+          PRINT_OPERATION("File %s removed\n", filename)
         }
         else
         {

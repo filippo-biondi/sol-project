@@ -75,7 +75,7 @@ int main(int argc, char* argv[])
   if(openConnection(socket_name, MSEC, abstime) == -1)
   {
     perror("Connection failed");
-    //exit(EXIT_FAILURE);
+    exit(EXIT_FAILURE);
   }
   PRINT_OPERATION("Connection opened on socket %s\n", socket_name)
   
