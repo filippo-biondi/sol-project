@@ -1,10 +1,10 @@
 CC		=  gcc
-CFLAGS	  += -std=c99 -Wall -g
+CFLAGS	  += -std=c99 -Wall -g -pthread
 INCLUDES	= -I ./include
 LDFLAGS 	= -Wl,-rpath,./lib -L ./lib
 
 # aggiungere qui altri targets
-TARGETS		= client
+TARGETS		= ./bin/client ./bin/server
 
 .PHONY: all clean cleanall
 .SUFFIXES: .c .h
@@ -32,9 +32,32 @@ TARGETS		= client
 
 ./lib/libconn_supp.so: ./obj/conn_supp.o
 	$(CC) $(CFLAGS) -shared -o $@ $<
-  
 
-  
+./bin/server: ./obj/server.o ./obj/worker_routine.o ./obj/server_op.o ./lib/libshared_queue.a ./lib/libicl_hash.a
+	$(CC) $(CFLAGS) ./obj/server.o ./obj/worker_routine.o ./obj/server_op.o -o $@ -L ./lib -lshared_queue -licl_hash
+
+./obj/server.o: ./src/server.c ./include/server_lib.h
+	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
+
+./obj/worker_routine.o: ./src/worker_routine.c ./include/server_lib.h ./include/server_op.h
+	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
+
+./obj/server_op.o: ./src/server_op.c ./include/server_op.h ./include/lock_lib.h
+	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
+
+./obj/shared_queue.o: ./src/shared_queue.c ./include/shared_queue.h
+	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
+
+./obj/icl_hash.o: ./src/icl_hash.c ./include/icl_hash.h
+	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
+
+./lib/libshared_queue.a: ./obj/shared_queue.o
+	ar rvs $@ $<
+
+./lib/libicl_hash.a: ./obj/icl_hash.o
+	ar rvs $@ $<
+	
+
 all		: $(TARGETS)
 
 
