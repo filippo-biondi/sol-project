@@ -20,10 +20,11 @@
 #include <sys/un.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <libgen.h>
 
 #define MAX_FILE_NO 50 
 #define MSEC 10
-#define MAX_WAIT_TIME 1
+#define MAX_WAIT_TIME 100
 #define MAX_OPEN_DIR 15
 
 #define PRINT_USAGE printf("Usage to be added!!!!!\n");
