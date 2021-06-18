@@ -25,11 +25,12 @@ typedef struct shared_queue SharedQueue;
 
 int enqueue(QueueNodePtr* head, QueueNodePtr* tail, void* data);
 int dequeue(QueueNodePtr* head, QueueNodePtr* tail, void** data);
+int insert_tail(QueueNodePtr* head, QueueNodePtr* tail, void* data);
 int isempty(QueueNodePtr head);
 
 void initQueue(SharedQueue* queue);
 int S_enqueue(SharedQueue* queue, void* data);
 int S_dequeue(SharedQueue* queue, void** data);
-
+int S_insert_tail(SharedQueue* queue, void* data);
 
 #endif
