@@ -17,7 +17,7 @@ int main(int argc, char* argv[])
   fd_set connected;
   int fd;
   int fd_max;
-  int* fdPtr;
+  struct request* new_request;
   int pipeFd[2];
   int handler_pipe[2];
   int term = 0;
@@ -252,9 +252,13 @@ int main(int argc, char* argv[])
 	      
 	      FD_CLR(fd, &set);
 	         
-	      MALLOC(fdPtr, sizeof(int))
-	      *fdPtr = fd;
-	      if(S_enqueue(&work_queue, fdPtr))
+	      MALLOC(new_request, sizeof(struct request))
+	      new_request->t = 'n';
+	      new_request->fd = fd;
+	      new_request->path = NULL;
+	      new_request->buf = NULL;
+	      new_request->buf_len = 0;
+	      if(S_enqueue(&work_queue, new_request) != 0)
 	      {
 	        perror("Error in worker queue");
           exit(EXIT_FAILURE);
@@ -264,10 +268,12 @@ int main(int argc, char* argv[])
 	}
 	
 
-	MALLOC(fdPtr, sizeof(int))
-	*fdPtr = -1;
+	MALLOC(new_request, sizeof(struct request))
+	new_request->t = 'n';
+	new_request->fd = -1;
+	new_request->path = NULL;
 	
-	if(S_insert_tail(&work_queue, fdPtr))
+	if(S_insert_tail(&work_queue, new_request) != 0)
 	{
 	  perror("Error in worker queue");
     exit(EXIT_FAILURE);
@@ -301,8 +307,8 @@ int main(int argc, char* argv[])
 	 
   while(work_queue.tail != NULL)
  	{
-	  S_dequeue(&work_queue, (void**) &fdPtr);
-	  free(fdPtr);
+	  S_dequeue(&work_queue, (void**) &new_request);
+	  free(new_request);
 	}
 	
 	return 0;

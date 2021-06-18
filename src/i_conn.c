@@ -116,6 +116,9 @@ int openFile(const char* pathname, int flags)
       case 'n':
         errno = ENOENT;
         return -1;
+      case 'p':
+        errno = EPERM;
+        return -1;
       default:
         errno = ECOMM;
         return -1;
@@ -144,6 +147,9 @@ int readFile(const char* pathname, void** buf, size_t* size)
     {
       case 'n':
         errno = ENOENT;
+        return -1;
+      case 'p':
+        errno = EPERM;
         return -1;
       case 'y':
         *size = response.size1;
@@ -271,8 +277,11 @@ int writeFile(const char* pathname, const char* dirname)
     {
       case 'y':
         return 0;
-      case 'n':
+      case 'p':
         errno = EPERM;
+        return -1;
+        case 't':
+        errno = EFBIG;
         return -1;
       default:
         errno = ECOMM;
@@ -308,6 +317,9 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
     {
       case 'y':
         return 0;
+      case 'p':
+        errno = EPERM;
+        return -1;
       case 'n':
         errno = ENOENT;
         return -1;
@@ -338,6 +350,9 @@ int lockFile(const char* pathname)
     {
       case 'y':
         return 0;
+      case 'p':
+        errno = EPERM;
+        return -1;
       case 'n':
         errno = ENOENT;
         return -1;
