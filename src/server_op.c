@@ -31,6 +31,10 @@ int openFile(struct storage* files, int fd, char* path, int flags)
   {
     if(flags & O_CREATE)
     {
+      if(file != NULL && file->deleting == 1)
+      {
+        
+      }
       if((file = malloc(sizeof(struct saved_file))) == NULL || (file->name = malloc(strlen(path) +1 )) == NULL)
       {
         ret = -1;
@@ -70,27 +74,35 @@ int openFile(struct storage* files, int fd, char* path, int flags)
   else
   {
     free(path);
-    if(flags & O_CREATE)
+    if(file->deleting == 1)
     {
-      errno = EEXIST;
+      errno = EPERM;
       ret = -1;
     }
     else
     {
-      while(file->locked != fd && file->locked != -1)
+      if(flags & O_CREATE)
       {
-        pthread_mutex_lock(&(files->mutex)); 
-        files->activeWriters--; 
-        pthread_cond_signal(&(files->go)); 
-        pthread_cond_wait(&(file->cond), &(files->mutex));
-        
-        WRITER_LOCK
+        errno = EEXIST;
+        ret = -1;
       }
-      if(flags & O_LOCK)
+      else
       {
-        file->locked = fd;
+        while(file->locked != fd && file->locked != -1)
+        {
+          pthread_mutex_lock(&(files->mutex)); 
+          files->activeWriters--; 
+          pthread_cond_signal(&(files->go)); 
+          pthread_cond_wait(&(file->cond), &(files->mutex));
+
+          WRITER_LOCK
+        }
+        if(flags & O_LOCK)
+        {
+          file->locked = fd;
+        }
+        FD_SET(fd, &(file->opened));
       }
-      FD_SET(fd, &(file->opened));
     }
   }
   
