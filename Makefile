@@ -6,8 +6,10 @@ LDFLAGS 	= -Wl,-rpath,./lib -L ./lib
 # aggiungere qui altri targets
 TARGETS		= ./bin/client ./bin/server
 
-.PHONY: all clean cleanall
-.SUFFIXES: .c .h
+.PHONY: all clean cleanall test1 test2
+.SUFFIXES: .c .h .a. so
+
+all: $(TARGETS)
 
 ./bin/client: ./obj/client.o ./obj/execute_command.o ./lib/libi_conn.so ./lib/libconn_supp.so
 	$(CC) $(CFLAGS) ./obj/client.o ./obj/execute_command.o -o $@ $(LDFLAGS) -li_conn -lconn_supp
@@ -33,8 +35,8 @@ TARGETS		= ./bin/client ./bin/server
 ./lib/libconn_supp.so: ./obj/conn_supp.o
 	$(CC) $(CFLAGS) -shared -o $@ $<
 
-./bin/server: ./obj/server.o ./obj/worker_routine.o ./obj/server_op.o ./lib/libshared_queue.a ./lib/libicl_hash.a
-	$(CC) $(CFLAGS) ./obj/server.o ./obj/worker_routine.o ./obj/server_op.o -o $@ -L ./lib -lshared_queue -licl_hash
+./bin/server: ./obj/server.o ./obj/worker_routine.o ./obj/server_op.o ./obj/signal_handler.o ./lib/libshared_queue.a ./lib/libicl_hash.a
+	$(CC) $(CFLAGS) ./obj/server.o ./obj/worker_routine.o ./obj/server_op.o ./obj/signal_handler.o -o $@ -L ./lib -lshared_queue -licl_hash
 
 ./obj/server.o: ./src/server.c ./include/server_lib.h
 	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
@@ -43,6 +45,9 @@ TARGETS		= ./bin/client ./bin/server
 	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
 
 ./obj/server_op.o: ./src/server_op.c ./include/server_op.h ./include/lock_lib.h
+	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
+	
+./obj/signal_handler.o: ./src/signal_handler.c ./include/server_lib.h
 	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
 
 ./obj/shared_queue.o: ./src/shared_queue.c ./include/shared_queue.h
@@ -57,14 +62,18 @@ TARGETS		= ./bin/client ./bin/server
 ./lib/libicl_hash.a: ./obj/icl_hash.o
 	ar rvs $@ $<
 	
+test1: $(TARGETS)
+	./test1.sh
+	
+test2: $(TARGETS)
+	chmod +x ./test2.sh
+	./test2.sh
 
-all		: $(TARGETS)
 
-
-clean		: 
+clean: 
 	rm -f $(TARGETS)
 cleanall	: clean
-	\rm -f *.o *~
+	\rm -f ./obj/* ./lib/* ./bin/* *~
 
 
 
