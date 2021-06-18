@@ -4,7 +4,7 @@
 
 extern int print_operation;
 
-void execute_command(int opt, int argc, char* argv[])
+int execute_command(int opt, int argc, char* argv[])
 {
   char* filename;
   char* dirname;
@@ -17,6 +17,7 @@ void execute_command(int opt, int argc, char* argv[])
   long int nw;
   void* buf;
   int ind;
+  int ret = 0;
   struct stat st;
   switch(opt)
   {
@@ -101,6 +102,7 @@ void execute_command(int opt, int argc, char* argv[])
       break;
       
     case 'D':
+      ret = -1;
       break;
       
     case 'r':
@@ -123,18 +125,41 @@ void execute_command(int opt, int argc, char* argv[])
       while(filename != NULL)
       {
         CHECK_PATH(filename)
-        if(readFile(filename, &buf, &nbyte) == -1)
+        if((abs_path = realpath(filename, NULL)) == NULL)
         {
-          PRINT_OPERATION_ERROR("Error in reading file")
+          PRINT_OPERATION_ERROR("Error while resolving path")
+          free(abs_path);
+          abs_dir_path = NULL;
+          break;
+        }
+        if(openFile(abs_path, 0) == 0)
+        {
+          PRINT_OPERATION("File %s opened in the server\n", abs_path)
+          if(readFile(abs_path, &buf, &nbyte) == -1)
+          {
+            PRINT_OPERATION_ERROR("Error in reading file")
+          }
+          else
+          {
+            PRINT_OPERATION("File %s read from the server for a total of %ld bytes\n", abs_path, nbyte)
+            if(dirname != NULL && saveInDir(dirname, filename, buf, nbyte) == 0)
+            {
+              
+              PRINT_OPERATION("File saved in directory %s\n", dirname)
+            }
+          }
+          if(closeFile(abs_path) == 0)
+          {
+            PRINT_OPERATION("File %s closed\n", abs_path)
+          }
+          else
+          {
+            PRINT_OPERATION_ERROR("Error while closing file")
+          }
         }
         else
         {
-          PRINT_OPERATION("File %s read from the server for a total of %ld bytes\n", filename, nbyte)
-          if(dirname != NULL && saveInDir(dirname, filename, buf, nbyte) == 0)
-          {
-            
-            PRINT_OPERATION("File saved in directory %s\n", dirname)
-          }
+          PRINT_OPERATION_ERROR("Error in file opening")
         }
         free(abs_path);
         filename = strtok(NULL, ",");
@@ -187,9 +212,20 @@ void execute_command(int opt, int argc, char* argv[])
       break;
            
     case 'd':
+      ret = -1;
+      ind = find(argc, argv, 1, "-r");
+      if(ind > optind || ind == -1)
+      {
+        ind = find(argc, argv, 1, "-R");
+        if(ind > optind || ind == -1)
+        {
+          PRINT_OPERATION("No option -r or -R related with option -d\n")
+        }
+      }
       break;
            
     case 't':
+      ret = -1;
       break;
            
     case 'l':
@@ -197,14 +233,30 @@ void execute_command(int opt, int argc, char* argv[])
       while(filename != NULL)
       {
         CHECK_PATH(filename)
-        if(lockFile(filename) == 0)
+        if((abs_path = realpath(filename, NULL)) == NULL)
         {
-          PRINT_OPERATION("Lock acquired on file %s\n", filename)
+          PRINT_OPERATION_ERROR("Error while resolving path")
+          free(abs_path);
+          abs_dir_path = NULL;
+          break;
+        }
+        if(openFile(abs_path, 0) == 0)
+        {
+          PRINT_OPERATION("File %s opened in the server\n", abs_path)
+          if(lockFile(abs_path) == 0)
+          {
+            PRINT_OPERATION("Lock acquired on file %s\n", abs_path)
+          }
+          else
+          {
+            PRINT_OPERATION_ERROR("Error while acquiring lock")
+          }
         }
         else
         {
-          PRINT_OPERATION_ERROR("Error while acquiring lock")
+          PRINT_OPERATION_ERROR("Error in file opening")
         }
+        free(abs_path);
         filename = strtok(NULL, ",");
       }
       break;
@@ -214,14 +266,30 @@ void execute_command(int opt, int argc, char* argv[])
       while(filename != NULL)
       {
         CHECK_PATH(filename)
-        if(unlockFile(filename) == 0)
+        if((abs_path = realpath(filename, NULL)) == NULL)
         {
-          PRINT_OPERATION("Lock released on file %s\n", filename)
+          PRINT_OPERATION_ERROR("Error while resolving path")
+          free(abs_path);
+          abs_dir_path = NULL;
+          break;
+        }
+        if(openFile(abs_path, 0) == 0)
+        {
+          PRINT_OPERATION("File %s opened in the server\n", abs_path)
+          if(unlockFile(abs_path) == 0)
+          {
+            PRINT_OPERATION("Lock released on file %s\n", abs_path)
+          }
+          else
+          {
+            PRINT_OPERATION_ERROR("Error while releasing lock")
+          }
         }
         else
         {
-          PRINT_OPERATION_ERROR("Error while releasing lock")
+          PRINT_OPERATION_ERROR("Error in file opening")
         }
+        free(abs_path);
         filename = strtok(NULL, ",");
       }
       break;
@@ -231,30 +299,47 @@ void execute_command(int opt, int argc, char* argv[])
       while(filename != NULL)
       {
         CHECK_PATH(filename)
-        if(removeFile(filename) == 0)
+        if((abs_path = realpath(filename, NULL)) == NULL)
         {
-          PRINT_OPERATION("File %s removed\n", filename)
+          PRINT_OPERATION_ERROR("Error while resolving path")
+          free(abs_path);
+          abs_dir_path = NULL;
+          break;
+        }
+        if(removeFile(abs_path) == 0)
+        {
+          PRINT_OPERATION("File %s removed\n", abs_path)
         }
         else
         {
           PRINT_OPERATION_ERROR("Error while removing file")
         }
+        free(abs_path);
         filename = strtok(NULL, ",");
       }
       break;
            
     case 'p':
+      ret = -1;
       break;
       
     case 'f':
+      ret = -1;
       break;
     
     case ':':
+      ret = -1;
       PRINT_OPERATION("Missing argument in option -%c\n", optopt)
       break;
            
     case '?':
+      ret = -1;
       PRINT_OPERATION("Unknown option\n")
       break;
+      
+    default:
+      ret = -1;
   }
+  
+  return ret;
 }

@@ -2,14 +2,14 @@
 #include <i_conn.h>
 #include <conn_supp.h>
 
-long int nbyte_read = 0;
+long int nbyte_write = 0;
 long int nwrite = 0;
 long int nwrite_tried = 0;
 long int nwrite_total;
 
 int writeDir(const char* dirname, int n, size_t* nbyte)
 {
-  nbyte_read = 0;
+  nbyte_write = 0;
   nwrite = 0;
   nwrite_tried = 0;
   nwrite_total = n;
@@ -17,7 +17,7 @@ int writeDir(const char* dirname, int n, size_t* nbyte)
   {
     return -1;
   }
-  *nbyte = nbyte_read;
+  *nbyte = nbyte_write;
   return nwrite;
 }
 
@@ -30,7 +30,7 @@ int writeFilefn(const char* pathname, const struct stat* info, const int typefla
     {
       if(writeFile(pathname, NULL) == 0)
       {
-        nbyte_read += info->st_size;
+        nbyte_write += info->st_size;
         nwrite++;
       }
       closeFile(pathname);

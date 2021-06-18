@@ -1,6 +1,6 @@
 #include <utils.h>
 #include <i_conn.h>
-extern void execute_command(int opt, int argc, char* argv[]);
+extern int execute_command(int opt, int argc, char* argv[]);
 
 int print_operation = 0;
 
@@ -68,8 +68,11 @@ int main(int argc, char* argv[])
       }
     }
   }
-  printf("Trying connect on %s socket\n", socket_name);
-  fflush(stdout);
+  if(socket_name == NULL)
+  {
+    printf("Option -f not specified, -h for usage\n"); 
+  }
+  PRINT_OPERATION("Trying connect on %s socket\n", socket_name)
   clock_gettime(CLOCK_REALTIME, &abstime);
   abstime.tv_sec += MAX_WAIT_TIME;
   if(openConnection(socket_name, MSEC, abstime) == -1)
@@ -83,8 +86,10 @@ int main(int argc, char* argv[])
   opt = getopt(argc, argv, "-:w:W:r:Rd:D:l:u:c:fhtp");
   while(opt != -1)
   {
-    execute_command(opt, argc, argv);
-    nanosleep(&sleeptime, NULL);
+    if(execute_command(opt, argc, argv) == 0 && optind < argc - 1)
+    {
+      nanosleep(&sleeptime, NULL);
+    }
     opt = getopt(argc, argv, ":w:W:r:R::d:D:l:u:c:fhtp");
   }
   if(closeConnection(socket_name) == 0)
