@@ -27,13 +27,6 @@ if(write(fd_skt, dirname, (strnlen(dirname, PATH_MAX-1) + 1) * sizeof(char)) != 
       errno = ECOMM;                                                                                                             \
       return -1;                                                                                                                 \
     }                                                                                                                            \
-    
-#define SEND_BUF(buf, size)           \
-if(write(fd_skt, buf, size) != size) \
-    {                                 \
-      errno = ECOMM;                  \
-      return -1;                      \
-    }                                 \
 
 #define READ_RESPONSE(response)                                                         \
 if(read(fd_skt, &response, sizeof(struct firstmessage)) != sizeof(struct firstmessage)) \

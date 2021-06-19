@@ -15,7 +15,7 @@
 #define DEFAULT_MAX_N_FILE 1000
 
 #define SEND_FIRST_MESSAGE(message)                                                   \
-if(write(*fd, &message, sizeof(struct firstmessage)) !=  sizeof(struct firstmessage)) \
+if(write(request->fd, &message, sizeof(struct firstmessage)) !=  sizeof(struct firstmessage)) \
 {                                                                                     \
   perror("Writing error");                                                            \
   if(errno == EPIPE)                                                                  \
@@ -29,20 +29,36 @@ if(write(*fd, &message, sizeof(struct firstmessage)) !=  sizeof(struct firstmess
 }                                                                                     \
     
 #define READ_FIRST_MESSAGE(message)                                                 \
-if(read(*fd, &message, sizeof(struct firstmessage)) != sizeof(struct firstmessage)) \
-{                                                                                   \
-  perror("Reading error");                                                          \
-  exit(EXIT_FAILURE);                                                               \
-}                                                                                   \
+if((byte_read = read(request->fd, message, sizeof(struct firstmessage))) != sizeof(struct firstmessage))\
+{\
+  if(byte_read == 0)\
+  {\
+    closeOpenedFile(files, request->fd, *(((struct thread_args*) arg)->fd_max));\
+    close(request->fd);\
+    negfd = -(request->fd);\
+    if(write(((struct thread_args*) arg)->pipe_fd, &negfd, sizeof(int)) != sizeof(int))\
+    {\
+      perror("Pipe error:");\
+      exit(EXIT_FAILURE);\
+    }\
+    free(request);\
+    continue;\
+  }\
+  printf("Invalid firstmessage\n");\
+  response.op = 'b';\
+  SEND_FIRST_MESSAGE(response)\
+  free(request);\
+  continue;\
+}  \
 
 #define READ_PATH(path, size)     \
-if(read(*fd, path, size) != size) \
+if(read(request->fd, path, size) != size) \
 {                                 \
   printf("Invalid message\n");    \
   response.op = 'b';              \
   SEND_FIRST_MESSAGE(response)    \
   free(path);                     \
-  continue;                       \
+  break;                       \
 }                                 \
   
 struct saved_file
@@ -54,8 +70,7 @@ struct saved_file
   int deleting;
   struct timespec last_access;
   fd_set opened;
-  pthread_mutex_t mutex;
-  pthread_cond_t cond;
+  SharedQueue* wait_queue;
 };
 
 struct storage
@@ -92,6 +107,16 @@ struct handler_args
 {
   int pipe_fd;
   int* terminate;
+};
+
+struct request
+{
+  char t;
+  int fd;
+  char* path;
+  void* buf;
+  int buf_len;
+  int flags;
 };
 
 struct firstmessage
