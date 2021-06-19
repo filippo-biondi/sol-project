@@ -72,8 +72,9 @@ test2: $(TARGETS)
 
 clean: 
 	rm -f $(TARGETS)
-cleanall	: clean
-	\rm -f ./obj/* ./lib/* ./bin/* *~
 
+cleanall	: clean
+	rm -f ./obj/* ./lib/* ./bin/* *~
+	find ./dest -type f -delete
 
 
