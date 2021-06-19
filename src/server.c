@@ -258,6 +258,7 @@ int main(int argc, char* argv[])
 	      new_request->path = NULL;
 	      new_request->buf = NULL;
 	      new_request->buf_len = 0;
+	      new_request->flags = 0;
 	      if(S_enqueue(&work_queue, new_request) != 0)
 	      {
 	        perror("Error in worker queue");
@@ -272,6 +273,8 @@ int main(int argc, char* argv[])
 	new_request->t = 'n';
 	new_request->fd = -1;
 	new_request->path = NULL;
+	new_request->buf = NULL;
+	new_request->buf_len = 0;
 	
 	if(S_insert_tail(&work_queue, new_request) != 0)
 	{
@@ -298,10 +301,7 @@ int main(int argc, char* argv[])
 	printf("Max dimension reached by the server: %fMB\n", (float) files.max_reached_storage / 1000000);
 	printf("There have been %d replacement for a total of %d victim file selected\n", files.n_replacement,files.n_victim);
   
-  if(icl_hash_dump(stdout, files.hashT) == -1)
-  {
-    printf("There were no file in the server\n");
-  }
+  my_icl_hash_dump(stdout, files.hashT);
   
 	icl_hash_destroy(files.hashT, free_key, free_data);
 	 

@@ -28,7 +28,7 @@ int openFile(struct storage* files, int fd, char* path, int flags)
   
   WRITER_LOCK
   
-  if((file = icl_hash_find(files->hashT, path)) == NULL || file->deleting == 1)
+  if((file = icl_hash_find(files->hashT, path)) == NULL)
   {
     if(flags & O_CREATE)
     {
@@ -55,7 +55,7 @@ int openFile(struct storage* files, int fd, char* path, int flags)
         {
           file->locked = -1;
         }
-        if(icl_hash_insert(files->hashT, path, file) == NULL)
+        if(icl_hash_insert(files->hashT, file->name, file) == NULL)
         {
           ret = -1;
         }
@@ -91,7 +91,8 @@ int openFile(struct storage* files, int fd, char* path, int flags)
           wait_request->path = path;
           wait_request->buf = NULL;
           wait_request->buf_len = 0;
-          if(S_enqueue(file->wait_queue, (void**) &(wait_request)) == 0)
+          wait_request->flags = flags;
+          if(S_enqueue(file->wait_queue, (void**) wait_request) == 0)
           {
             errno = EACCES;
           }
@@ -140,7 +141,8 @@ int readFile(struct storage* files, int fd, char* path, void** buf, size_t* size
         wait_request->path = path;
         wait_request->buf = NULL;
         wait_request->buf_len = 0;
-        if(S_enqueue(file->wait_queue, (void**) &(wait_request)) == 0)
+        wait_request->flags = 0;
+        if(S_enqueue(file->wait_queue, (void**) wait_request) == 0)
         {
           errno = EACCES;
         }
@@ -178,6 +180,7 @@ int readNFile(struct storage* files, int fd, int N)
   size_t name_len;
   size_t buf_size;
   int bucket = 0;
+  long int written_bytes = 0;
   icl_entry_t* curr = NULL;
   struct saved_file* file;
   struct firstmessage response;
@@ -193,7 +196,7 @@ int readNFile(struct storage* files, int fd, int N)
   while(curr != NULL && (N == 0 || ret < N))
   {
     file = (struct saved_file*) curr->data;
-    if(file->locked != fd && file->locked != -1)
+    if((file->locked != fd && file->locked != -1) || file->deleting)
     {
       scan_hash_r(files->hashT, &bucket, &curr);
       continue;
@@ -201,20 +204,28 @@ int readNFile(struct storage* files, int fd, int N)
     clock_gettime(CLOCK_REALTIME, &(file->last_access));
     name_len = strlen(file->name) + 1;
     buf_size = file->size;
-    if(write(fd, &name_len, sizeof(size_t)) != sizeof(size_t) || write(fd, &buf_size, sizeof(size_t)) != sizeof(size_t))
+    if(write(fd, &name_len, sizeof(size_t)) != sizeof(size_t) || write(fd, &buf_size, sizeof(size_t)) != sizeof(size_t) || write(fd, file->name, name_len) != name_len)
     {
       ret = -1;
-      break;
     }
     else
     {
-      if(write(fd, file->name, name_len) != name_len || write(fd, file->buf, buf_size) != buf_size)
+      errno = 0;
+      while((written_bytes += write(fd, file->buf + written_bytes, buf_size - written_bytes)) != buf_size)
       {
-        ret = -1;
+        if(errno != 0)
+        {
+          ret = -1;
+          break;
+        }
+      }
+      if(ret == -1)
+      {
         break;
       }
       ret++;
       scan_hash_r(files->hashT, &bucket, &curr);
+      written_bytes = 0;
     }
   }
   if(ret != -1)
@@ -341,7 +352,7 @@ int appendFile(struct storage* files, int fd, char* path, void* buf, size_t size
     {
       if(FD_ISSET(fd, &(file->opened)) == 1)
       {
-        if(file->locked != fd || file->locked != -1)
+        if(file->locked != fd && file->locked != -1)
         {
           MALLOC(wait_request, sizeof(struct request))
           wait_request->t = 'a';
@@ -349,7 +360,8 @@ int appendFile(struct storage* files, int fd, char* path, void* buf, size_t size
           wait_request->path = path;
           wait_request->buf = buf;
           wait_request->buf_len = size;
-          if(S_enqueue(file->wait_queue, (void**) &(wait_request)) == 0)
+          wait_request->flags = 0;
+          if(S_enqueue(file->wait_queue, (void**) wait_request) == 0)
           {
             errno = EACCES;
           }
@@ -365,7 +377,7 @@ int appendFile(struct storage* files, int fd, char* path, void* buf, size_t size
           {
             endbuf = file->buf + file->size;
             memcpy(endbuf, buf, size);
-            if(file-size == 0)
+            if(file->size == 0)
             {
               files->n_saved_file++;
             }
@@ -437,7 +449,8 @@ int lock(struct storage* files, int fd, char* path)
         wait_request->path = path;
         wait_request->buf = NULL;
         wait_request->buf_len = 0;
-        if(S_enqueue(file->wait_queue, (void**) &(wait_request)) == 0)
+        wait_request->flags = 0;
+        if(S_enqueue(file->wait_queue, (void**) wait_request) == 0)
         {
           errno = EACCES;
         }
@@ -487,7 +500,7 @@ int unlock(struct thread_args* args, int fd, char* path)
         clock_gettime(CLOCK_REALTIME, &(file->last_access));
         
         
-        if(file->wait_queue->head != NULL)
+        while(file->wait_queue->head != NULL)
         {
           if(S_dequeue(file->wait_queue, (void**) &pending_request) == 0)
           {
@@ -531,7 +544,7 @@ int closeFile(struct thread_args* args, int fd, char* path, int fd_max)
     {
       file->locked = -1;
       
-      if(file->wait_queue->head != NULL)
+      while(file->wait_queue->head != NULL)
       {
         if(S_dequeue(file->wait_queue, (void**) &pending_request) == 0)
         {
@@ -577,6 +590,11 @@ int deleteFile(struct storage* files, int fd, char* path, int fd_max)
   }
   else
   {
+    FD_CLR(fd, &(file->opened));
+    if(file->locked == fd)
+    {
+      file->locked = -1;
+    }
     file->deleting = 1;
     for(i=0; i <= fd_max; i++)
     {
@@ -699,7 +717,6 @@ void free_data(void* data)
 {
   struct saved_file* file = (struct saved_file*) data;
   struct request* tmp_req;
-  free(file->name);
   free(file->buf);
   while(file->wait_queue->head != NULL)
   {
@@ -733,9 +750,10 @@ int timecmp(struct timespec t1, struct timespec t2)
         return t1.tv_sec - t2.tv_sec;
 }
 
-void closeOpenedFile(struct storage* files, int fd)
+void closeOpenedFile(struct storage* files, int fd, int fd_max)
 {
   int bucket = 0;
+  int i;
   icl_entry_t* curr = NULL;
   struct saved_file* file = NULL;
   
@@ -747,7 +765,46 @@ void closeOpenedFile(struct storage* files, int fd)
     if(FD_ISSET(fd, &(file->opened)) == 1)
     {
       FD_CLR(fd, &(file->opened));
+      if(file->locked == fd)
+      {
+        file->locked = -1;
+      }
+      if(file->deleting == 1)
+      {
+        for(i=0; i <= fd_max; i++)
+        {
+          if(FD_ISSET(i, &(file->opened)))
+          {
+            break;
+          }
+        }
+        if(i == fd_max + 1)
+        {
+          files->used_storage -= file->size;
+          files->n_saved_file--;
+          icl_hash_delete(files->hashT, file->name, free_key, free_data);
+        }
+      }
     }
     scan_hash_r(files->hashT, &bucket, &curr);
   }
+}
+
+int my_icl_hash_dump(FILE* stream, icl_hash_t* ht)
+{
+    icl_entry_t *bucket, *curr;
+    int i;
+    fprintf(stream, "Files in storage:\n");
+    if(!ht) return -1;
+
+    for(i=0; i<ht->nbuckets; i++) {
+        bucket = ht->buckets[i];
+        for(curr=bucket; curr!=NULL; ) {
+            if(curr->key)
+                fprintf(stream, "%s: %ldB\n", (char *)curr->key, ((struct saved_file*) curr->data)->size);
+            curr=curr->next;
+        }
+    }
+
+    return 0;
 }

@@ -132,6 +132,7 @@ int openFile(const char* pathname, int flags)
 }
 int readFile(const char* pathname, void** buf, size_t* size)
 {
+  long int byte_read = 0;
   struct firstmessage message;
   struct firstmessage response;
   if(connected)
@@ -158,10 +159,13 @@ int readFile(const char* pathname, void** buf, size_t* size)
           errno = ENOMEM;
           return -1;
         }
-        if(read(fd_skt, *buf, *size) != *size)
+        while((byte_read += read(fd_skt, *buf + byte_read, *size - byte_read)) != *size)
         {
-          errno = ECOMM;
-          return -1;
+          if(errno != 0)
+          {
+            errno = ECOMM;
+            return -1;
+          }
         }
         return 0;
         
@@ -185,6 +189,7 @@ int readNFiles(int N, const char* dirname)
   void* buf;
   int files_read = 0;
   int save_err = 0;
+  int written_bytes = 0;
   struct firstmessage message;
   struct firstmessage response;
   if(connected)
@@ -213,11 +218,22 @@ int readNFiles(int N, const char* dirname)
           {
             return -1;
           }
-          if(read(fd_skt, path, len_path) != len_path || read(fd_skt, buf, len_buf) != len_buf)
+          errno = 0;
+          if(read(fd_skt, path, len_path) != len_path) 
           {
             errno = ECOMM;
             return -1;
           }
+          errno = 0;
+          while((written_bytes += read(fd_skt, buf + written_bytes, len_buf - written_bytes)) != len_buf)
+          {
+            if(errno != 0)
+            {
+              errno = ECOMM;
+              return -1;
+            }
+          }
+          written_bytes = 0;
           files_read++;
           if(dirname != NULL && saveInDir(dirname, path, buf, len_buf) == -1)
           {
@@ -299,6 +315,7 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
 {
   struct firstmessage message;
   struct firstmessage response;
+  long int written_byte = 0;
   if(connected)
   {
     message.op = 'a';
@@ -306,7 +323,18 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
     message.size2 = size;
     SEND_FIRST_MESSAGE(message)
     SEND_PATHNAME(pathname)
-    SEND_BUF(buf, size)
+    while((written_byte += write(fd_skt, buf + written_byte, size - written_byte)) != size)
+    {
+      if(errno == 0)
+      {
+        break;
+      }
+    }
+    if(errno != 0)
+    {
+      errno = ECOMM;
+      return -1;
+    }
     if(dirname != NULL)
     {
       SEND_DIRNAME(dirname)

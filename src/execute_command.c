@@ -107,7 +107,7 @@ int execute_command(int opt, int argc, char* argv[])
       
     case 'r':
       dirname = NULL;
-      if((ind = find(argc, argv, optind, "-d")) != -1)
+      if((ind = find(argc, argv, optind, 'd')) != -1)
       {
         dirname = argv[ind];
         CHECK_PATH(dirname)
@@ -171,7 +171,7 @@ int execute_command(int opt, int argc, char* argv[])
       break;
     case 'R':
       abs_dir_path = NULL;
-      if((ind = find(argc, argv, optind, "-d")) != -1)
+      if((ind = find(argc, argv, optind, 'd')) != -1)
       {
         dirname = argv[ind];
         CHECK_PATH(dirname)
@@ -213,10 +213,10 @@ int execute_command(int opt, int argc, char* argv[])
            
     case 'd':
       ret = -1;
-      ind = find(argc, argv, 1, "-r");
+      ind = find(argc, argv, 1, 'r');
       if(ind > optind || ind == -1)
       {
-        ind = find(argc, argv, 1, "-R");
+        ind = find(argc, argv, 1, 'R');
         if(ind > optind || ind == -1)
         {
           PRINT_OPERATION("No option -r or -R related with option -d\n")
@@ -273,24 +273,16 @@ int execute_command(int opt, int argc, char* argv[])
           abs_dir_path = NULL;
           break;
         }
-        if(openFile(abs_path, 0) == 0)
+        if(unlockFile(abs_path) == 0)
         {
-          PRINT_OPERATION("File %s opened in the server\n", abs_path)
-          if(unlockFile(abs_path) == 0)
-          {
-            PRINT_OPERATION("Lock released on file %s\n", abs_path)
-          }
-          else
-          {
-            PRINT_OPERATION_ERROR("Error while releasing lock")
-          }
+          PRINT_OPERATION("Lock released on file %s\n", abs_path)
         }
         else
         {
-          PRINT_OPERATION_ERROR("Error in file opening")
+          PRINT_OPERATION_ERROR("Error while releasing lock")
         }
-        free(abs_path);
-        filename = strtok(NULL, ",");
+          free(abs_path);
+          filename = strtok(NULL, ",");
       }
       break;
            

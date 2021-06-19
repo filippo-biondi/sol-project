@@ -43,11 +43,11 @@ int writeFilefn(const char* pathname, const struct stat* info, const int typefla
   return 0;
 }
 
-int find(int argc, char* argv[], int optind, char* s)
+int find(int argc, char* argv[], int optind, char s)
 {
   for(int i=optind; i < argc -1; i++)
   {
-    if(strcmp(argv[i], s) == 0)
+    if(argv[i][0] == '-' && argv[i][1] == s)
     {
       return i+1;
     }

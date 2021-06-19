@@ -13,8 +13,9 @@ void* worker_routine(void* arg)
   void* buf;
   size_t size;
   int N;
-  int byte_read;
+  long int byte_read;
   int client_disc;
+  long int written_bytes = 0;
   
   memset(&response, 0, sizeof(struct firstmessage));
   MALLOC(recived, sizeof(struct firstmessage))
@@ -45,28 +46,8 @@ void* worker_routine(void* arg)
 	      break;
       }
       
-
-      if((byte_read = read(request->fd, recived, sizeof(struct firstmessage))) != sizeof(struct firstmessage))
-      {
-        if(byte_read == 0)
-        {
-          closeOpenedFile(files, request->fd);
-          close(request->fd);
-          negfd = -(request->fd);
-          if(write(((struct thread_args*) arg)->pipe_fd, &negfd, sizeof(int)) != sizeof(int))
-          {
-            perror("Pipe error:");
-            exit(EXIT_FAILURE);
-          }
-          free(request);
-          continue;
-        }
-        printf("Invalid firstmessage\n");
-        response.op = 'b';
-        SEND_FIRST_MESSAGE(response)
-        free(request);
-        continue;
-      }
+      READ_FIRST_MESSAGE(recived)
+      
     }
     client_disc = 0;
     
@@ -89,6 +70,7 @@ void* worker_routine(void* arg)
         else
         {
           path = request->path;
+          flags = request->flags;
         }
       
         if(openFile(files, request->fd, path, flags) == -1)
@@ -117,6 +99,7 @@ void* worker_routine(void* arg)
         }
         SEND_FIRST_MESSAGE(response)
         free(request);
+       free(path);
         break;
         
       case 'r':
@@ -137,10 +120,11 @@ void* worker_routine(void* arg)
             free(request);
             break;
           }
-          if(errno == EPERM)
+          else if(errno == EPERM)
           {
-            response.op = 'n';
+            response.op = 'p';
             SEND_FIRST_MESSAGE(response)
+            free(request);
             free(path);
             break;
           }
@@ -148,6 +132,7 @@ void* worker_routine(void* arg)
           {
             response.op = 'n';
             SEND_FIRST_MESSAGE(response)
+            free(request);
             free(path);
             break;
           }
@@ -159,18 +144,25 @@ void* worker_routine(void* arg)
           SEND_FIRST_MESSAGE(response)
           if(client_disc == 0)
           {
-            if(write(request->fd, buf, size) != size)
+            errno = 0;
+            while((written_bytes += write(request->fd, buf + written_bytes, size - written_bytes)) != size)
             {
-              perror("Writing error");  
-              if(errno == EPIPE)
+              if(errno != 0)
               {
-                client_disc = 1;
-              }
-              else
-              {                                                
-                exit(EXIT_FAILURE);
+                break;
               }
             }
+            written_bytes = 0;
+          }
+            
+          if(errno == EPIPE)
+          {
+            client_disc = 1;
+          }
+          else if(errno != 0)
+          {  
+            perror("Writing error");                                              
+            exit(EXIT_FAILURE);
           }
         }
         free(path);
@@ -208,7 +200,7 @@ void* worker_routine(void* arg)
           {
             response.op = 'p';
           }
-          if(errno == EFBIG)
+          else if(errno == EFBIG)
           {
             response.op = 't';
           }
@@ -234,11 +226,21 @@ void* worker_routine(void* arg)
           MALLOC(path, recived->size1)
           READ_PATH(path, recived->size1)
           MALLOC(buf, recived->size2)
-          if(read(request->fd, buf, recived->size2) != recived->size2)
+          errno = 0;
+          while((byte_read += read(request->fd, buf + byte_read, recived->size2 - byte_read)) != recived->size2)
+          {
+            if(errno != 0)
+            {
+              break;
+            }
+          }
+          byte_read = 0;
+          if(errno != 0)
           {
             printf("Invalid message\n");
             response.op = 'b';
             SEND_FIRST_MESSAGE(response)
+            free(request);
             free(path);
             free(buf);
             break;
@@ -252,16 +254,16 @@ void* worker_routine(void* arg)
         }
         if(appendFile(files, request->fd, path, buf, recived->size2, NULL) == -1)
         {
-          if(errno = EACCES)
+          if(errno == EACCES)
           {
             free(request);
             break;
           }
-          if(errno = EPERM)
+          else if(errno == EPERM)
           {
             response.op = 'p';
           }
-          if(errno = EFBIG)
+          else if(errno == EFBIG)
           {
             response.op = 't';
           }
@@ -297,7 +299,7 @@ void* worker_routine(void* arg)
             free(request);
             break;
           }
-          if(errno == EPERM)
+          else if(errno == EPERM)
           {
             response.op = 'p';
           }
@@ -373,8 +375,8 @@ void* worker_routine(void* arg)
     
     if(client_disc == 1)
     {
-      closeOpenedFile(files, request->fd);
-      negfd = -(request->fd);
+      closeOpenedFile(files, fd, *(((struct thread_args*) arg)->fd_max));
+      negfd = -(fd);
       if(request->path != NULL)
       {
         free(path);
