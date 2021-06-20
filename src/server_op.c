@@ -249,12 +249,10 @@ int readNFile(struct storage* files, int fd, int N)
   return ret;
 }
 
-int writeFile(struct storage* files, int fd, char* path, char* path_2)
+int writeFile(struct storage* files, int fd, char* path, void* buf, size_t size, char* path_2)
 {
   int ret = 0;
-  int fd_src;
   int temp_vict;
-  struct stat st;
   struct saved_file* file;
 
   WRITER_LOCK
@@ -271,26 +269,16 @@ int writeFile(struct storage* files, int fd, char* path, char* path_2)
       errno = EPERM;
       ret = -1;
     }
-    else
-    {
-      if((fd_src = open(path, O_RDONLY)) == -1)
-      {
-        ret = -1;
-      }
-      else
-      {
-        fstat(fd_src, &st);
-        if(st.st_size < files->max_storage)
+        if(size <= files->max_storage)
         {
-          if((file->buf = malloc(st.st_size)) == NULL ||  read(fd_src, file->buf, st.st_size) != st.st_size)
+          if((file->buf = malloc(size)) == NULL)
           {
-            close(fd_src);
             ret = -1;
           }
           else
           {
             temp_vict = files->n_victim;
-            while(files->used_storage + st.st_size > files->max_storage || files->n_saved_file + 1 > files->max_n_file)
+            while(files->used_storage + size > files->max_storage || files->n_saved_file + 1 > files->max_n_file)
             {
               replace(files);
               files->n_victim++;
@@ -299,11 +287,11 @@ int writeFile(struct storage* files, int fd, char* path, char* path_2)
             {
               files->n_replacement++;
             }
-            file->size = st.st_size;
-            files->used_storage += st.st_size;
+            memcpy(file->buf, buf, size);
+            file->size = size;
+            files->used_storage += size;
             files->n_saved_file++;
             clock_gettime(CLOCK_REALTIME, &(file->last_access));
-            
             
             if(files->used_storage > files->max_reached_storage)
             {
@@ -313,18 +301,14 @@ int writeFile(struct storage* files, int fd, char* path, char* path_2)
             {
               files->max_reached_n_file = files->n_saved_file;
             }
-            close(fd_src);
           }
         }
         else
         {
           file->deleting = 1;
           errno = EFBIG;
-          close(fd_src);
           ret = -1;
         }
-      }
-    }
   }
   
   WRITER_UNLOCK
@@ -350,7 +334,7 @@ int appendFile(struct storage* files, int fd, char* path, void* buf, size_t size
   }
   else
   { 
-    if(size > files->max_storage)
+    if(file->size + size > files->max_storage)
     {
       errno = EFBIG;
       ret = -1;
@@ -593,7 +577,7 @@ int deleteFile(struct storage* files, int fd, char* path, int fd_max)
   
   WRITER_LOCK
   
-  if((file = icl_hash_find(files->hashT, path)) == NULL)
+  if((file = icl_hash_find(files->hashT, path)) == NULL || file->deleting == 1)
   { 
     errno = ENOENT;
     ret = -1;

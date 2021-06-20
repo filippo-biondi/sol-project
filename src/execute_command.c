@@ -15,6 +15,7 @@ int execute_command(int opt, int argc, char* argv[])
   char* endptr;
   char* nstring;
   long int nw;
+
   void* buf;
   int ind;
   int ret = 0;
@@ -72,9 +73,11 @@ int execute_command(int opt, int argc, char* argv[])
         }
         stat(abs_path, &st);
         nbyte = st.st_size;
+        
         if(openFile(abs_path, O_CREATE | O_LOCK) == 0)
         {
           PRINT_OPERATION("File %s opened in the server\n", abs_path)
+          
           if(writeFile(abs_path, NULL) == 0)
           {
             PRINT_OPERATION("File %s written in the server for a total of %ld bytes\n", abs_path, nbyte)
@@ -96,8 +99,8 @@ int execute_command(int opt, int argc, char* argv[])
         {
           PRINT_OPERATION_ERROR("Error in file opening")
         }
-        free(abs_path);
         filename = strtok(NULL, ",");
+        free(abs_path);
       }
       break;
       
@@ -142,11 +145,12 @@ int execute_command(int opt, int argc, char* argv[])
           else
           {
             PRINT_OPERATION("File %s read from the server for a total of %ld bytes\n", abs_path, nbyte)
-            if(dirname != NULL && saveInDir(dirname, filename, buf, nbyte) == 0)
+            if(dirname != NULL && saveInDir(abs_dir_path, filename, buf, nbyte) == 0)
             {
               
               PRINT_OPERATION("File saved in directory %s\n", dirname)
             }
+            free(buf);
           }
           if(closeFile(abs_path) == 0)
           {
@@ -162,6 +166,7 @@ int execute_command(int opt, int argc, char* argv[])
           PRINT_OPERATION_ERROR("Error in file opening")
         }
         free(abs_path);
+        
         filename = strtok(NULL, ",");
       }
       if(dirname != NULL)
@@ -212,6 +217,10 @@ int execute_command(int opt, int argc, char* argv[])
         {  
           PRINT_OPERATION("File saved in directory %s\n", dirname)
         }
+      }
+      if(abs_dir_path != NULL)
+      {
+        free(abs_dir_path);
       }
       break;
            

@@ -193,8 +193,9 @@ void* worker_routine(void* arg)
       case 'w':
         MALLOC(path, recived->size1)
         READ_PATH(path, recived->size1)
-        
-        if(writeFile(files, request->fd, path, NULL) == -1)
+        MALLOC(buf, recived->size2)
+        READ_BUF(buf, recived->size2)
+        if(writeFile(files, request->fd, path, buf, recived->size2, NULL) == -1)
         {
           if(errno == EPERM)
           {
@@ -217,6 +218,7 @@ void* worker_routine(void* arg)
         SEND_FIRST_MESSAGE(response)
         free(request);
         free(path);
+        free(buf);
         break;
         
       case 'a':
@@ -226,26 +228,7 @@ void* worker_routine(void* arg)
           MALLOC(path, recived->size1)
           READ_PATH(path, recived->size1)
           MALLOC(buf, recived->size2)
-          byte_read = 0;
-          errno = 0;
-          while((byte_read += read(request->fd, buf + byte_read, recived->size2 - byte_read)) != recived->size2)
-          {
-            if(errno != 0)
-            {
-              break;
-            }
-          }
-          byte_read = 0;
-          if(errno != 0)
-          {
-            printf("Invalid message\n");
-            response.op = 'b';
-            SEND_FIRST_MESSAGE(response)
-            free(request);
-            free(path);
-            free(buf);
-            break;
-          }
+          READ_BUF(buf, recived->size2)
         }
         else
         {

@@ -156,7 +156,6 @@ int readFile(const char* pathname, void** buf, size_t* size)
         *size = response.size1;
         if((*buf = malloc(*size)) == NULL)
         {
-          errno = ENOMEM;
           return -1;
         }
         while((byte_read += read(fd_skt, *buf + byte_read, *size - byte_read)) != *size)
@@ -268,38 +267,66 @@ int readNFiles(int N, const char* dirname)
 
 int writeFile(const char* pathname, const char* dirname)
 {
+  long int written_byte = 0;
+  FILE* fdW;
+  void* buf;
+  struct stat st;
   struct firstmessage message;
   struct firstmessage response;
   if(connected)
   {
     message.op = 'w';
     message.size1 = (strnlen(pathname, PATH_MAX-1) + 1) * sizeof(char);
-    if(dirname == NULL)
-    { 
-      message.size2 = 0;
-    }
-    else
+    stat(pathname, &st);
+    message.size2 = st.st_size;
+    if((buf = malloc(st.st_size)) == NULL)
     {
-      message.size2 = (strnlen(dirname, PATH_MAX-1) + 1) * sizeof(char);
+      return -1;
     }
+    if((fdW = fopen(pathname, "rb")) == NULL)
+    {
+      return -1;
+    }
+    if(fread(buf, st.st_size, 1, fdW) != 1)
+    {
+      fclose(fdW);
+      return -1;
+    }
+    fclose(fdW);
     SEND_FIRST_MESSAGE(message)
     SEND_PATHNAME(pathname)
-    if(dirname != NULL)
+    
+    errno = 0;
+    while((written_byte += write(fd_skt, buf + written_byte, st.st_size - written_byte)) != st.st_size)
     {
-      SEND_DIRNAME(dirname)
+      if(errno != 0)
+      {
+        break;
+      }
     }
+    if(errno != 0)
+    {
+      free(buf);
+      errno = ECOMM;
+      return -1;
+    }
+    
     READ_RESPONSE(response)
     switch(response.op)
     {
       case 'y':
+        free(buf);
         return 0;
       case 'p':
+        free(buf);
         errno = EPERM;
         return -1;
         case 't':
+        free(buf);
         errno = EFBIG;
         return -1;
       default:
+        free(buf);
         errno = ECOMM;
         return -1;
     }
@@ -324,18 +351,7 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
     SEND_FIRST_MESSAGE(message)
     SEND_PATHNAME(pathname)
     errno = 0;
-    while((written_byte += write(fd_skt, buf + written_byte, size - written_byte)) != size)
-    {
-      if(errno != 0)
-      {
-        break;
-      }
-    }
-    if(errno != 0)
-    {
-      errno = ECOMM;
-      return -1;
-    }
+    SEND_BUF(buf, size);
     
     READ_RESPONSE(response)
     switch(response.op)
@@ -506,5 +522,6 @@ int saveInDir(const char* dirname, char* filename, void* buf, size_t size)
     free(complete_path);
     return -1;
   }
+  free(complete_path);
   return 0;
 }

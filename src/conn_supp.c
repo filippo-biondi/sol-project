@@ -28,6 +28,7 @@ int writeFilefn(const char* pathname, const struct stat* info, const int typefla
     nwrite_tried++;
     if(openFile(pathname, O_CREATE | O_LOCK) == 0)
     {
+      errno = 0;
       if(writeFile(pathname, NULL) == 0)
       {
         nbyte_write += info->st_size;
