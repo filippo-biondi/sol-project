@@ -61,6 +61,28 @@ if(read(request->fd, path, size) != size) \
   free(path);                     \
   break;                       \
 }                                 \
+
+#define READ_BUF(buf, size)\
+byte_read = 0;\
+errno = 0;\
+while((byte_read += read(request->fd, buf + byte_read, size - byte_read)) != size)\
+{\
+  if(errno != 0)\
+  {\
+    break;\
+  }\
+}\
+byte_read = 0;\
+if(errno != 0)\
+{\
+  printf("Invalid message\n");\
+  response.op = 'b';\
+  SEND_FIRST_MESSAGE(response)\
+  free(request);\
+  free(path);\
+  free(buf);\
+  break;\
+}\
   
 struct saved_file
 {
