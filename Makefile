@@ -63,7 +63,7 @@ all: $(TARGETS)
 	ar rvs $@ $<
 	
 test1: $(TARGETS)
-	chmod +x ./test2.sh
+	chmod +x ./test1.sh
 	./test1.sh
 	
 test2: $(TARGETS)
