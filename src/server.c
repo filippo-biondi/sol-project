@@ -17,7 +17,7 @@ int main(int argc, char* argv[])
   fd_set connected;
   int fd;
   int fd_max;
-  int* fdPtr;
+  struct request* new_request;
   int pipeFd[2];
   int handler_pipe[2];
   int term = 0;
@@ -26,27 +26,20 @@ int main(int argc, char* argv[])
   int k;
   SharedQueue work_queue;
   sigset_t mask;
-  struct sigaction s;
   struct handler_args argh;
   pthread_t sighandler_thread;
   
   sigemptyset(&mask);
   sigaddset(&mask, SIGINT); 
   sigaddset(&mask, SIGQUIT);
-  sigaddset(&mask, SIGHUP); 
+  sigaddset(&mask, SIGHUP);
+  sigaddset(&mask, SIGPIPE);
   
   if ((errno = pthread_sigmask(SIG_BLOCK, &mask, NULL)) != 0) 
   {
 	  perror("Error in masking signal");
 	  exit(EXIT_FAILURE);
   }
-  memset(&s,0,sizeof(s));    
-  s.sa_handler=SIG_IGN;
-  if ((sigaction(SIGPIPE, &s, NULL)) == -1 ) 
-  {   
-	  perror("Error in sigaction");
-    exit(EXIT_FAILURE);
-  } 
   
   if(pipe(handler_pipe) == -1)
   {
@@ -252,9 +245,14 @@ int main(int argc, char* argv[])
 	      
 	      FD_CLR(fd, &set);
 	         
-	      MALLOC(fdPtr, sizeof(int))
-	      *fdPtr = fd;
-	      if(S_enqueue(&work_queue, fdPtr))
+	      MALLOC(new_request, sizeof(struct request))
+	      new_request->t = 'n';
+	      new_request->fd = fd;
+	      new_request->path = NULL;
+	      new_request->buf = NULL;
+	      new_request->buf_len = 0;
+	      new_request->flags = 0;
+	      if(S_enqueue(&work_queue, new_request) != 0)
 	      {
 	        perror("Error in worker queue");
           exit(EXIT_FAILURE);
@@ -264,10 +262,14 @@ int main(int argc, char* argv[])
 	}
 	
 
-	MALLOC(fdPtr, sizeof(int))
-	*fdPtr = -1;
+	MALLOC(new_request, sizeof(struct request))
+	new_request->t = 'n';
+	new_request->fd = -1;
+	new_request->path = NULL;
+	new_request->buf = NULL;
+	new_request->buf_len = 0;
 	
-	if(S_insert_tail(&work_queue, fdPtr))
+	if(S_insert_tail(&work_queue, new_request) != 0)
 	{
 	  perror("Error in worker queue");
     exit(EXIT_FAILURE);
@@ -292,17 +294,14 @@ int main(int argc, char* argv[])
 	printf("Max dimension reached by the server: %fMB\n", (float) files.max_reached_storage / 1000000);
 	printf("There have been %d replacement for a total of %d victim file selected\n", files.n_replacement,files.n_victim);
   
-  if(icl_hash_dump(stdout, files.hashT) == -1)
-  {
-    printf("There were no file in the server\n");
-  }
+  my_icl_hash_dump(stdout, files.hashT);
   
 	icl_hash_destroy(files.hashT, free_key, free_data);
 	 
   while(work_queue.tail != NULL)
  	{
-	  S_dequeue(&work_queue, (void**) &fdPtr);
-	  free(fdPtr);
+	  S_dequeue(&work_queue, (void**) &new_request);
+	  free(new_request);
 	}
 	
 	return 0;

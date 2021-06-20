@@ -72,7 +72,7 @@ int main(int argc, char* argv[])
   {
     printf("Option -f not specified, -h for usage\n"); 
   }
-  PRINT_OPERATION("Trying connect on %s socket\n", socket_name)
+  PRINT_OPERATION("Trying connect on socket \"%s\"\n", socket_name)
   clock_gettime(CLOCK_REALTIME, &abstime);
   abstime.tv_sec += MAX_WAIT_TIME;
   if(openConnection(socket_name, MSEC, abstime) == -1)
@@ -80,15 +80,20 @@ int main(int argc, char* argv[])
     perror("Connection failed");
     exit(EXIT_FAILURE);
   }
-  PRINT_OPERATION("Connection opened on socket %s\n", socket_name)
+  PRINT_OPERATION("Connection opened on socket \"%s\"\n", socket_name)
   
   int opt;
-  opt = getopt(argc, argv, "-:w:W:r:Rd:D:l:u:c:fhtp");
+  int first = 1;
+  opt = getopt(argc, argv, "-:w:W:r:Rd:D:l:u:c:ftp");
   while(opt != -1)
   {
-    if(execute_command(opt, argc, argv) == 0 && optind < argc - 1)
+    if(first != 1 && opt != 1 && opt != ':'&& opt != '?' && opt != 'f' && opt != 't' && opt != 'p' && opt != 'd' && opt != 'D')
     {
       nanosleep(&sleeptime, NULL);
+    }
+    if(execute_command(opt, argc, argv) == 0)
+    {
+      first = 0;
     }
     opt = getopt(argc, argv, ":w:W:r:R::d:D:l:u:c:fhtp");
   }
