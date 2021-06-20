@@ -87,8 +87,8 @@ struct storage
   int n_victim;
   
   
-  long int used_storage;
-  int n_saved_file;
+  long int volatile used_storage;
+  int volatile n_saved_file;
   
   int activeReaders;
   int activeWriters;
