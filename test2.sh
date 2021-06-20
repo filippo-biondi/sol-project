@@ -5,10 +5,10 @@ SERVER_PID=$!
 ./bin/client -p -f socket -W random_file/rf1.txt -l random_file/rf1.txt
 #write rf1.txt on the server and acquire lock on it
 
-./bin/client -p -t 1000 -f socket -l random_file/rf1.txt -W random_file/rf2.txt -u random_file/rf1.txt &
+./bin/client -p -t 2000 -f socket -l random_file/rf1.txt -W random_file/rf2.txt -u random_file/rf1.txt &
 #acquire the lock on rf1.txt, write rf2.txt and release lock on rf1.txt (waiting 1 second between request)
 
-sleep 0.2
+sleep 0.5
 #sleep prevent the next client to be served before precedent client (this would cause stiil a correct output but upredictable and difficoult to read)
 
 ./bin/client -p -t 200 -f socket -r random_file/rf1.txt -W random_file/rf1.txt
@@ -20,7 +20,7 @@ sleep 0.2
 ./bin/client -p -t 2000 -f socket -l random_file/rf2.txt -u random_file/rf2.txt &
 #acquire lock ion rf2.txt and release it after 2 seconds
 
-sleep 0.2
+sleep 0.5
 #same reason of other sleep
 
 ./bin/client -p -f socket -R -d dest
@@ -32,7 +32,7 @@ sleep 0.2
 ./bin/client -p -t 500 -f socket -c random_file/random_file2/rf19 -c random_file/random_file2/rf20
 #remove rf19 and rf20 from the server (succeed because rf19 and rf20 are the last inserted file and no other operation have been made in the server so replacement algorithm didn't removed them)
 ./bin/client -p -f socket -R -d dest/dest2
-#read all file saved in the server and save them in dest2 (this shoud match with the file list that server print on exit after reciving the signal)
+#read all file saved in the server and save them in dest2 (this shoud match with the file list that server print on exit after reciving the signal exept for rf2.txt whitch is locked)
 
 kill -1 ${SERVER_PID}
 #server exit only after lock on rf2 has been released
