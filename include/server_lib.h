@@ -17,13 +17,14 @@
 #define SEND_FIRST_MESSAGE(message)                                                   \
 if(write(request->fd, &message, sizeof(struct firstmessage)) !=  sizeof(struct firstmessage)) \
 {                                                                                     \
-  perror("Writing error");                                                            \
+                                                             \
   if(errno == EPIPE)                                                                  \
   {                                                                                   \
     client_disc = 1;                                                                  \
   }                                                                                   \
   else                                                                                \
-  {                                                                                   \
+  { \
+    perror("Writing error");                                                          \
     exit(EXIT_FAILURE);                                                               \
   }                                                                                   \
 }                                                                                     \
@@ -68,6 +69,7 @@ struct saved_file
   size_t size;
   int locked;
   int deleting;
+  pthread_mutex_t mutex;
   struct timespec last_access;
   fd_set opened;
   SharedQueue* wait_queue;
