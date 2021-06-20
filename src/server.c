@@ -26,27 +26,20 @@ int main(int argc, char* argv[])
   int k;
   SharedQueue work_queue;
   sigset_t mask;
-  struct sigaction s;
   struct handler_args argh;
   pthread_t sighandler_thread;
   
   sigemptyset(&mask);
   sigaddset(&mask, SIGINT); 
   sigaddset(&mask, SIGQUIT);
-  sigaddset(&mask, SIGHUP); 
+  sigaddset(&mask, SIGHUP);
+  sigaddset(&mask, SIGPIPE);
   
   if ((errno = pthread_sigmask(SIG_BLOCK, &mask, NULL)) != 0) 
   {
 	  perror("Error in masking signal");
 	  exit(EXIT_FAILURE);
   }
-  memset(&s,0,sizeof(s));    
-  s.sa_handler=SIG_IGN;
-  if ((sigaction(SIGPIPE, &s, NULL)) == -1 ) 
-  {   
-	  perror("Error in sigaction");
-    exit(EXIT_FAILURE);
-  } 
   
   if(pipe(handler_pipe) == -1)
   {

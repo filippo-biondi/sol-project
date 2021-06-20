@@ -44,6 +44,7 @@ int openFile(struct storage* files, int fd, char* path, int flags)
         file->deleting = 0;
         MALLOC(file->wait_queue, sizeof(SharedQueue));
         initQueue(file->wait_queue);
+        MUTEX_INIT(file->mutex)
         clock_gettime(CLOCK_REALTIME, &(file->last_access));
         FD_ZERO(&(file->opened));
         FD_SET(fd, &(file->opened));
@@ -158,7 +159,9 @@ int readFile(struct storage* files, int fd, char* path, void** buf, size_t* size
         {
           memcpy(*buf, file->buf, file->size);
           *size = file->size;
+          MUTEX_LOCK(file->mutex)
           clock_gettime(CLOCK_REALTIME, &(file->last_access));
+          MUTEX_UNLOCK(file->mutex)
         }
       }
     }
@@ -201,7 +204,9 @@ int readNFile(struct storage* files, int fd, int N)
       scan_hash_r(files->hashT, &bucket, &curr);
       continue;
     }
+    MUTEX_LOCK(file->mutex)
     clock_gettime(CLOCK_REALTIME, &(file->last_access));
+    MUTEX_UNLOCK(file->mutex)
     name_len = strlen(file->name) + 1;
     buf_size = file->size;
     if(write(fd, &name_len, sizeof(size_t)) != sizeof(size_t) || write(fd, &buf_size, sizeof(size_t)) != sizeof(size_t) || write(fd, file->name, name_len) != name_len)

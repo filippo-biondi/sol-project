@@ -323,9 +323,10 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
     message.size2 = size;
     SEND_FIRST_MESSAGE(message)
     SEND_PATHNAME(pathname)
+    errno = 0;
     while((written_byte += write(fd_skt, buf + written_byte, size - written_byte)) != size)
     {
-      if(errno == 0)
+      if(errno != 0)
       {
         break;
       }
@@ -334,10 +335,6 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
     {
       errno = ECOMM;
       return -1;
-    }
-    if(dirname != NULL)
-    {
-      SEND_DIRNAME(dirname)
     }
     
     READ_RESPONSE(response)

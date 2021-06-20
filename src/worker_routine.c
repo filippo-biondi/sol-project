@@ -13,7 +13,7 @@ void* worker_routine(void* arg)
   void* buf;
   size_t size;
   int N;
-  long int byte_read;
+  long int byte_read = 0;
   int client_disc;
   long int written_bytes = 0;
   
@@ -99,7 +99,7 @@ void* worker_routine(void* arg)
         }
         SEND_FIRST_MESSAGE(response)
         free(request);
-       free(path);
+        free(path);
         break;
         
       case 'r':
@@ -226,6 +226,7 @@ void* worker_routine(void* arg)
           MALLOC(path, recived->size1)
           READ_PATH(path, recived->size1)
           MALLOC(buf, recived->size2)
+          byte_read = 0;
           errno = 0;
           while((byte_read += read(request->fd, buf + byte_read, recived->size2 - byte_read)) != recived->size2)
           {
@@ -377,15 +378,7 @@ void* worker_routine(void* arg)
     {
       closeOpenedFile(files, fd, *(((struct thread_args*) arg)->fd_max));
       negfd = -(fd);
-      if(request->path != NULL)
-      {
-        free(path);
-      }
-      if(request->buf != NULL)
-      {
-        free(buf);
-      }
-      free(request);
+      //free(request);
       if(write(((struct thread_args*) arg)->pipe_fd, &negfd, sizeof(int)) != sizeof(int))
       {
         perror("Pipe error:");
