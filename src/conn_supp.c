@@ -32,8 +32,12 @@ int writeFilefn(const char* pathname, const struct stat* info, const int typefla
       {
         nbyte_write += info->st_size;
         nwrite++;
+        closeFile(pathname);
       }
-      closeFile(pathname);
+      if(errno == EFBIG)
+      {
+        closeFile(pathname);
+      }
     }
   }
   if(nwrite_total != 0 && nwrite_tried == nwrite_total)

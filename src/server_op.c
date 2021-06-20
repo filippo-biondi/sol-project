@@ -199,7 +199,7 @@ int readNFile(struct storage* files, int fd, int N)
   while(curr != NULL && (N == 0 || ret < N))
   {
     file = (struct saved_file*) curr->data;
-    if((file->locked != fd && file->locked != -1) || file->deleting)
+    if((file->locked != fd && file->locked != -1) || file->deleting == 1 || file->size == 0)
     {
       scan_hash_r(files->hashT, &bucket, &curr);
       continue;
@@ -284,6 +284,7 @@ int writeFile(struct storage* files, int fd, char* path, char* path_2)
         {
           if((file->buf = malloc(st.st_size)) == NULL ||  read(fd_src, file->buf, st.st_size) != st.st_size)
           {
+            close(fd_src);
             ret = -1;
           }
           else
@@ -319,6 +320,7 @@ int writeFile(struct storage* files, int fd, char* path, char* path_2)
         {
           file->deleting = 1;
           errno = EFBIG;
+          close(fd_src);
           ret = -1;
         }
       }
@@ -569,7 +571,10 @@ int closeFile(struct thread_args* args, int fd, char* path, int fd_max)
       if(i == fd_max + 1)
       {
         files->used_storage -= file->size;
-        files->n_saved_file--;
+        if(file->size != 0)
+        {
+          files->n_saved_file--;
+        }
         icl_hash_delete(files->hashT, path, free_key, free_data);
       }
     }
@@ -646,7 +651,7 @@ int replace(struct storage* files)
   {
     file = (struct saved_file*) victim->data;
     files->used_storage -= file->size;
-    files->n_saved_file --;
+    files->n_saved_file--;
     icl_hash_delete(files->hashT, file->name, free_key, free_data);
     return 0;
   }
@@ -672,7 +677,7 @@ int replace(struct storage* files)
   
   file = (struct saved_file*) victim->data;
   files->used_storage -= file->size;
-  files->n_saved_file --;
+  files->n_saved_file--;
   icl_hash_delete(files->hashT, file->name, free_key, free_data);
   return 0;
 }

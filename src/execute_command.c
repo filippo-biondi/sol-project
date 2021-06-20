@@ -208,6 +208,10 @@ int execute_command(int opt, int argc, char* argv[])
       else
       {
         PRINT_OPERATION("%ld files read from server\n", n)
+        if(dirname != NULL)
+        {  
+          PRINT_OPERATION("File saved in directory %s\n", dirname)
+        }
       }
       break;
            

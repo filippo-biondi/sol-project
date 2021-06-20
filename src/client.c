@@ -87,7 +87,7 @@ int main(int argc, char* argv[])
   opt = getopt(argc, argv, "-:w:W:r:Rd:D:l:u:c:ftp");
   while(opt != -1)
   {
-    if(first != 1 && opt != 1 && opt != ':'&& opt != '?' && opt != 'f' && opt != 't' && opt != 'p' && opt != 'd' && opt != 'D')
+    if(t != 0 && first != 1 && opt != 1 && opt != ':'&& opt != '?' && opt != 'f' && opt != 't' && opt != 'p' && opt != 'd' && opt != 'D')
     {
       nanosleep(&sleeptime, NULL);
     }
