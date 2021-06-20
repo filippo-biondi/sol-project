@@ -8,6 +8,9 @@ SERVER_PID=$!
 ./bin/client -p -t 1000 -f socket -l random_file/rf1.txt -W random_file/rf2.txt -u random_file/rf1.txt &
 #acquire the lock on rf1.txt, write rf2.txt and release lock on rf1.txt (waiting 1 second between request)
 
+sleep 0.2
+#sleep prevent the next client to be served before precedent client (this would cause stiil a correct output but upredictable and difficoult to read)
+
 ./bin/client -p -t 200 -f socket -r random_file/rf1.txt -W random_file/rf1.txt
 #attempt to read a locked file so have to wait untill precedent client relese the lock and then try to write it (fail because file already exist)
 
@@ -16,6 +19,9 @@ SERVER_PID=$!
 
 ./bin/client -p -t 2000 -f socket -l random_file/rf2.txt -u random_file/rf2.txt &
 #acquire lock ion rf2.txt and release it after 2 seconds
+
+sleep 0.2
+#same reason of other sleep
 
 ./bin/client -p -f socket -R -d dest
 #read all file saved in the server and save them in dest (rf2.txt should not be in dest because is locked)
@@ -29,4 +35,4 @@ SERVER_PID=$!
 #read all file saved in the server and save them in dest2 (this shoud match with the file list that server print on exit after reciving the signal)
 
 kill -1 ${SERVER_PID}
-
+#server exit only after lock on rf2 has been released
