@@ -6,7 +6,7 @@ LDFLAGS 	= -Wl,-rpath,./lib -L ./lib
 # aggiungere qui altri targets
 TARGETS		= ./bin/client ./bin/server
 
-.PHONY: all clean cleanall test1 test2
+.PHONY: all clean cleandest cleanall test1 test2
 .SUFFIXES: .c .h .a. so
 
 all: $(TARGETS)
@@ -63,6 +63,7 @@ all: $(TARGETS)
 	ar rvs $@ $<
 	
 test1: $(TARGETS)
+	chmod +x ./test2.sh
 	./test1.sh
 	
 test2: $(TARGETS)
@@ -72,8 +73,11 @@ test2: $(TARGETS)
 
 clean: 
 	rm -f $(TARGETS)
+	
+cleandest:
+	find ./dest -type f -delete
 
-cleanall	: clean
+cleanall:
 	rm -f ./obj/* ./lib/* ./bin/* *~
 	find ./dest -type f -delete
 
