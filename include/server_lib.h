@@ -1,4 +1,4 @@
-#if !defined(_SERVER_LIB)
+#ifndef _SERVER_LIB
 #define _SERVER_LIB
 
 #include <utils.h>
@@ -13,76 +13,75 @@
 #define DEFAULT_N_WORKER 10
 #define DEFAULT_MAX_STORAGE 100000000
 #define DEFAULT_MAX_N_FILE 1000
+#define DEFAULT_SOCKET "socket"
 
-#define SEND_FIRST_MESSAGE(message)                                                   \
-if(write(request->fd, &message, sizeof(struct firstmessage)) !=  sizeof(struct firstmessage)) \
-{                                                                                     \
-                                                             \
-  if(errno == EPIPE)                                                                  \
-  {                                                                                   \
-    client_disc = 1;                                                                  \
-  }                                                                                   \
-  else                                                                                \
-  { \
-    perror("Writing error");                                                          \
-    exit(EXIT_FAILURE);                                                               \
-  }                                                                                   \
-}                                                                                     \
+#define SEND_FIRST_MESSAGE(message)                                                  \
+if(write(fd, &message, sizeof(struct firstmessage)) !=  sizeof(struct firstmessage)) \
+{                                                                                    \
+  if(errno == EPIPE)                                                                 \
+  {                                                                                  \
+    client_disc = 1;                                                                 \
+  }                                                                                  \
+  else                                                                               \
+  {                                                                                  \
+    wr_error = 1;                                                                    \
+  }                                                                                  \
+}                                                                                    \
     
-#define READ_FIRST_MESSAGE(message)                                                 \
-if((byte_read = read(request->fd, message, sizeof(struct firstmessage))) != sizeof(struct firstmessage))\
-{\
-  if(byte_read == 0)\
-  {\
-    closeOpenedFile(files, request->fd, *(((struct thread_args*) arg)->fd_max));\
-    close(request->fd);\
-    negfd = -(request->fd);\
-    if(write(((struct thread_args*) arg)->pipe_fd, &negfd, sizeof(int)) != sizeof(int))\
-    {\
-      perror("Pipe error:");\
-      exit(EXIT_FAILURE);\
-    }\
-    free(request);\
-    continue;\
-  }\
-  printf("Invalid firstmessage\n");\
-  response.op = 'b';\
-  SEND_FIRST_MESSAGE(response)\
-  free(request);\
-  continue;\
-}  \
+#define READ_FIRST_MESSAGE(message)                                                             \
+if((byte_read = read(fd, message, sizeof(struct firstmessage))) != sizeof(struct firstmessage)) \
+{                                                                                               \
+  if(byte_read == 0)                                                                            \
+  {                                                                                             \
+    closeOpenedFile(files, fd, *(((struct thread_args*) arg)->fd_max));                         \
+    close(fd);                                                                                  \
+    negfd = -(fd);                                                                              \
+    free(request);                                                                              \
+    if(write(((struct thread_args*) arg)->pipe_fd, &negfd, sizeof(int)) != sizeof(int))         \
+    {                                                                                           \
+      perror("Pipe error:");                                                                    \
+      pthread_exit(NULL);                                                                       \
+    }                                                                                           \
+    continue;                                                                                   \
+  }                                                                                             \
+  printf("Invalid firstmessage\n");                                                             \
+  response.op = 'b';                                                                            \
+  free(request);                                                                                \
+  SEND_FIRST_MESSAGE(response)                                                                  \
+  continue;                                                                                     \
+}                                                                                               \
 
-#define READ_PATH(path, size)     \
-if(read(request->fd, path, size) != size) \
-{                                 \
-  printf("Invalid message\n");    \
-  response.op = 'b';              \
-  SEND_FIRST_MESSAGE(response)    \
-  free(path);                     \
-  break;                       \
-}                                 \
+#define READ_PATH(path, size)    \
+if(read(fd, path, size) != size) \
+{                                \
+  printf("Invalid message\n");   \
+  response.op = 'b';             \
+  free(path);                    \
+  SEND_FIRST_MESSAGE(response)   \
+  break;                         \
+}                                \
 
-#define READ_BUF(buf, size)\
-byte_read = 0;\
-errno = 0;\
-while((byte_read += read(request->fd, buf + byte_read, size - byte_read)) != size)\
-{\
-  if(errno != 0)\
-  {\
-    break;\
-  }\
-}\
-byte_read = 0;\
-if(errno != 0)\
-{\
-  printf("Invalid message\n");\
-  response.op = 'b';\
-  SEND_FIRST_MESSAGE(response)\
-  free(request);\
-  free(path);\
-  free(buf);\
-  break;\
-}\
+#define READ_BUF(buf, size)                                               \
+byte_read = 0;                                                            \
+errno = 0;                                                                \
+while((byte_read += read(fd, buf + byte_read, size - byte_read)) != size) \
+{                                                                         \
+  if(errno != 0)                                                          \
+  {                                                                       \
+    break;                                                                \
+  }                                                                       \
+}                                                                         \
+byte_read = 0;                                                            \
+if(errno != 0)                                                            \
+{                                                                         \
+  printf("Invalid message\n");                                            \
+  response.op = 'b';                                                      \
+  free(request);                                                          \
+  free(path);                                                             \
+  free(buf);                                                              \
+  SEND_FIRST_MESSAGE(response)                                            \
+  break;                                                                  \
+}                                                                         \
   
 struct saved_file
 {
@@ -109,8 +108,8 @@ struct storage
   int n_victim;
   
   
-  long int volatile used_storage;
-  int volatile n_saved_file;
+  long int used_storage;
+  int n_saved_file;
   
   int activeReaders;
   int activeWriters;
