@@ -1,11 +1,10 @@
 #include <server_op.h>
 
-void initStorage(struct storage* files, int n_buckets)
+int initStorage(struct storage* files, int n_buckets)
 {
   if((files->hashT = icl_hash_create( n_buckets, hash_pjw, string_compare)) == NULL)
   {
-    perror("Error in hash creating");
-    exit(EXIT_FAILURE);
+    return -1;
   }
   files->max_reached_storage = 0;
   files->max_reached_n_file = 0;
@@ -18,6 +17,7 @@ void initStorage(struct storage* files, int n_buckets)
   MUTEX_INIT(files->mutex)
   MUTEX_INIT(files->ordering)
   COND_INIT(files->go)
+  return 0;
 }
 
 int openFile(struct storage* files, int fd, char* path, int flags)
@@ -28,15 +28,15 @@ int openFile(struct storage* files, int fd, char* path, int flags)
   
   WRITER_LOCK
   
-  if((file = icl_hash_find(files->hashT, path)) == NULL)
+  if((file = icl_hash_find(files->hashT, path)) == NULL)  //if file isn't found in storage
   {
-    if(flags & O_CREATE)
+    if(flags & O_CREATE)  //create it if O_CREATE flag is set
     {
       if((file = malloc(sizeof(struct saved_file))) == NULL || (file->name = malloc(strlen(path) +1 )) == NULL)
       {
         ret = -1;
       }
-      else
+      else  //file is created
       {
         strcpy(file->name, path);
         file->buf = NULL;
@@ -62,29 +62,29 @@ int openFile(struct storage* files, int fd, char* path, int flags)
         }
       }
     }
-    else
+    else  //if O_CREATE isn't set
     {
       errno = ENOENT;
       ret = -1;
     }
   }
-  else
+  else  //if the file is found
   {
-    if(file->deleting == 1)
+    if(file->deleting == 1)  //if a remove has benne made on that file is not accessible for new client
     {
       errno = EPERM;
       ret = -1;
     }
     else
     {
-      if(flags & O_CREATE)
+      if(flags & O_CREATE) //the file already exist so it can't be created
       {
         errno = EEXIST;
         ret = -1;
       }
       else
       {
-        if(file->locked != fd && file->locked != -1)
+        if(file->locked != fd && file->locked != -1)  //if lock is owned by another client create a new pending request and put it in waiting queue of ile
         {
           MALLOC(wait_request, sizeof(struct request))
           wait_request->t = 'o';
@@ -105,7 +105,7 @@ int openFile(struct storage* files, int fd, char* path, int flags)
           {
             file->locked = fd;
           }
-          FD_SET(fd, &(file->opened));
+          FD_SET(fd, &(file->opened));  //set file as opened for client identified by fd
         }
       }
     }
@@ -132,7 +132,7 @@ int readFile(struct storage* files, int fd, char* path, void** buf, size_t* size
   }
   else
   {
-    if(FD_ISSET(fd, &(file->opened)) == 1)
+    if(FD_ISSET(fd, &(file->opened)) == 1)  //check if file has been opened by client
     {
       if(file->locked != fd && file->locked != -1)
       {
@@ -157,7 +157,7 @@ int readFile(struct storage* files, int fd, char* path, void** buf, size_t* size
         }
         else
         {
-          memcpy(*buf, file->buf, file->size);
+          memcpy(*buf, file->buf, file->size);  //file is copied in the buffer the will be sent to the client
           *size = file->size;
           MUTEX_LOCK(file->mutex)
           clock_gettime(CLOCK_REALTIME, &(file->last_access));
@@ -165,7 +165,7 @@ int readFile(struct storage* files, int fd, char* path, void** buf, size_t* size
         }
       }
     }
-    else
+    else  //if file has not been opened operation is not permitted
     {
       errno = EPERM;
       ret = -1;
@@ -188,20 +188,22 @@ int readNFile(struct storage* files, int fd, int N)
   struct saved_file* file;
   struct firstmessage response;
   memset(&response, 0, sizeof(struct firstmessage));
+  
   READER_LOCK
-  scan_hash_r(files->hashT, &bucket, &curr);
+  
+  scan_hash_r(files->hashT, &bucket, &curr);  //rentrant function used to scan the hash
   response.op = 'y';
   if(write(fd, &response, sizeof(struct firstmessage)) !=  sizeof(struct firstmessage))
   {
     READER_UNLOCK                                                                            
     return -1;                                                            
   } 
-  while(curr != NULL && (N == 0 || ret < N))
+  while(curr != NULL && (N == 0 || ret < N))  //when curr is NULL all file in hash has been scanned
   {
     file = (struct saved_file*) curr->data;
-    if((file->locked != fd && file->locked != -1) || file->deleting == 1 || file->size == 0)
+    if((file->locked != fd && file->locked != -1) || file->deleting == 1 || file->size == 0)  //if file is locked by another client, deleted (but not still removed) or created but not write yet
     {
-      scan_hash_r(files->hashT, &bucket, &curr);
+      scan_hash_r(files->hashT, &bucket, &curr);  //skip to the next file
       continue;
     }
     MUTEX_LOCK(file->mutex)
@@ -209,14 +211,15 @@ int readNFile(struct storage* files, int fd, int N)
     MUTEX_UNLOCK(file->mutex)
     name_len = strlen(file->name) + 1;
     buf_size = file->size;
-    if(write(fd, &name_len, sizeof(size_t)) != sizeof(size_t) || write(fd, &buf_size, sizeof(size_t)) != sizeof(size_t) || write(fd, file->name, name_len) != name_len)
+    //inform the client about the dimension of the file he's going to recive
+    if(write(fd, &name_len, sizeof(size_t)) != sizeof(size_t) || write(fd, &buf_size, sizeof(size_t)) != sizeof(size_t) || write(fd, file->name, name_len) != name_len)   
     {
       ret = -1;
     }
     else
     {
       errno = 0;
-      while((written_bytes += write(fd, file->buf + written_bytes, buf_size - written_bytes)) != buf_size)
+      while((written_bytes += write(fd, file->buf + written_bytes, buf_size - written_bytes)) != buf_size)  //send file
       {
         if(errno != 0)
         {
@@ -233,28 +236,26 @@ int readNFile(struct storage* files, int fd, int N)
       written_bytes = 0;
     }
   }
-  if(ret != -1)
+  if(ret != -1) //if no error occured
   {
     name_len = 0;
     buf_size = 0;
-    if(write(fd, &name_len, sizeof(size_t)) != sizeof(size_t) || write(fd, &buf_size, sizeof(size_t)) != sizeof(size_t))
+    if(write(fd, &name_len, sizeof(size_t)) != sizeof(size_t) || write(fd, &buf_size, sizeof(size_t)) != sizeof(size_t))  //tell the client that files are finished
     {
       ret = -1;
     }
   }
-  
   
   READER_UNLOCK
   
   return ret;
 }
 
-int writeFile(struct storage* files, int fd, char* path, char* path_2)
+int writeFile(struct thread_args* args, int fd, char* path, void* buf, size_t size, char* path_2)
 {
   int ret = 0;
-  int fd_src;
   int temp_vict;
-  struct stat st;
+  struct storage* files = args->files;
   struct saved_file* file;
 
   WRITER_LOCK
@@ -266,44 +267,34 @@ int writeFile(struct storage* files, int fd, char* path, char* path_2)
   }
   else
   {
-    if(file->size != 0 || file->locked != fd)
+    if(file->size != 0 || file->locked != fd)  //file must be locked and not yet written
     {
       errno = EPERM;
       ret = -1;
     }
-    else
-    {
-      if((fd_src = open(path, O_RDONLY)) == -1)
-      {
-        ret = -1;
-      }
-      else
-      {
-        fstat(fd_src, &st);
-        if(st.st_size < files->max_storage)
+        if(size <= files->max_storage)  //file can be stored in server
         {
-          if((file->buf = malloc(st.st_size)) == NULL ||  read(fd_src, file->buf, st.st_size) != st.st_size)
+          if((file->buf = malloc(size)) == NULL)
           {
-            close(fd_src);
             ret = -1;
           }
           else
           {
             temp_vict = files->n_victim;
-            while(files->used_storage + st.st_size > files->max_storage || files->n_saved_file + 1 > files->max_n_file)
+            while(files->used_storage + size > files->max_storage || files->n_saved_file + 1 > files->max_n_file)  //execute replacement algorithm utill file can be written without exceding limits
             {
-              replace(files);
+              replace(files, args->work_queue);
               files->n_victim++;
             }
-            if(temp_vict != files->n_victim)
+            if(temp_vict != files->n_victim)  //a replacement has been made (a replacement can cause multiple victime file to be removed)
             {
               files->n_replacement++;
             }
-            file->size = st.st_size;
-            files->used_storage += st.st_size;
+            memcpy(file->buf, buf, size);
+            file->size = size;
+            files->used_storage += size;
             files->n_saved_file++;
             clock_gettime(CLOCK_REALTIME, &(file->last_access));
-            
             
             if(files->used_storage > files->max_reached_storage)
             {
@@ -313,18 +304,14 @@ int writeFile(struct storage* files, int fd, char* path, char* path_2)
             {
               files->max_reached_n_file = files->n_saved_file;
             }
-            close(fd_src);
           }
         }
         else
         {
           file->deleting = 1;
           errno = EFBIG;
-          close(fd_src);
           ret = -1;
         }
-      }
-    }
   }
   
   WRITER_UNLOCK
@@ -332,13 +319,14 @@ int writeFile(struct storage* files, int fd, char* path, char* path_2)
   return ret;
 }
 
-int appendFile(struct storage* files, int fd, char* path, void* buf, size_t size, char* path_2)
+int appendFile(struct thread_args* args, int fd, char* path, void* buf, size_t size, char* path_2)  //similar to writeFile but buf is appended to the buffer of file
 {
   int ret = 0;
   void* endbuf;
   int tmplocked;
   int temp_vict;
   struct saved_file* file;
+  struct storage* files = args->files;
   struct request* wait_request;
   
   WRITER_LOCK
@@ -350,7 +338,7 @@ int appendFile(struct storage* files, int fd, char* path, void* buf, size_t size
   }
   else
   { 
-    if(size > files->max_storage)
+    if(file->size + size > files->max_storage)
     {
       errno = EFBIG;
       ret = -1;
@@ -396,7 +384,7 @@ int appendFile(struct storage* files, int fd, char* path, void* buf, size_t size
             temp_vict = files->n_victim;
             while(files->used_storage > files->max_storage || files->n_saved_file > files->max_n_file)
             {
-              replace(files);
+              replace(files, args->work_queue);
               files->n_victim++;
             }
             
@@ -494,9 +482,9 @@ int unlock(struct thread_args* args, int fd, char* path)
   }
   else
   {
-    if(FD_ISSET(fd, &(file->opened)) == 1)
+    if(FD_ISSET(fd, &(file->opened)) == 1)  //this check could actualy be removed because is impossible to acquire the lock without opening the file and lock is automatically released on close
     {
-      if(file->locked != fd && file->locked != -1)
+      if(file->locked != fd)  //lock can be relased only if is owned
       {
         ret = -1;
         errno = EPERM;
@@ -507,7 +495,7 @@ int unlock(struct thread_args* args, int fd, char* path)
         clock_gettime(CLOCK_REALTIME, &(file->last_access));
         
         
-        while(file->wait_queue->head != NULL)
+        while(file->wait_queue->head != NULL)  //move requests (if there are) from file's waiting_queue to work_queue
         {
           if(S_dequeue(file->wait_queue, (void**) &pending_request) == 0)
           {
@@ -546,37 +534,45 @@ int closeFile(struct thread_args* args, int fd, char* path, int fd_max)
   }
   else
   {
-    FD_CLR(fd, &(file->opened));
-    if(file->locked == fd)
+    if(FD_ISSET(fd, &(file->opened)))
     {
-      file->locked = -1;
-      
-      while(file->wait_queue->head != NULL)
+      FD_CLR(fd, &(file->opened));
+      if(file->locked == fd)  //lock automatically released if owned
       {
-        if(S_dequeue(file->wait_queue, (void**) &pending_request) == 0)
+        file->locked = -1;
+        
+        while(file->wait_queue->head != NULL)  //move requests (if there are) from file's waiting_queue to work_queue
         {
-          S_enqueue(args->work_queue, pending_request);
+          if(S_dequeue(file->wait_queue, (void**) &pending_request) == 0)
+          {
+            S_enqueue(args->work_queue, pending_request);
+          }
+        }
+      }
+      if(file->deleting == 1)  //if a remove has been made on file
+      {
+        for(i=0; i <= fd_max; i++)  //check if the client was the last one to have this file opened and definetly delete the file if true
+        {
+          if(FD_ISSET(i, &(file->opened)))
+          {
+            break;
+          }
+        }
+        if(i == fd_max + 1)
+        {
+          files->used_storage -= file->size;
+          if(file->size != 0)
+          {
+            files->n_saved_file--;
+          }
+          icl_hash_delete(files->hashT, path, free_key, free_data);
         }
       }
     }
-    if(file->deleting == 1)
+    else
     {
-      for(i=0; i <= fd_max; i++)
-      {
-        if(FD_ISSET(i, &(file->opened)))
-        {
-          break;
-        }
-      }
-      if(i == fd_max + 1)
-      {
-        files->used_storage -= file->size;
-        if(file->size != 0)
-        {
-          files->n_saved_file--;
-        }
-        icl_hash_delete(files->hashT, path, free_key, free_data);
-      }
+      errno = EPERM;
+      ret = -1;
     }
   }
   
@@ -593,20 +589,20 @@ int deleteFile(struct storage* files, int fd, char* path, int fd_max)
   
   WRITER_LOCK
   
-  if((file = icl_hash_find(files->hashT, path)) == NULL)
+  if((file = icl_hash_find(files->hashT, path)) == NULL || file->deleting == 1)  //if file doesn't exist or a delete has already been made (but file is still opened by someone)
   { 
     errno = ENOENT;
     ret = -1;
   }
   else
   {
-    FD_CLR(fd, &(file->opened));
+    FD_CLR(fd, &(file->opened));  //automatically close the file for the client if is open (having opened the file is not necessary in order to remove the file)
     if(file->locked == fd)
     {
       file->locked = -1;
     }
-    file->deleting = 1;
-    for(i=0; i <= fd_max; i++)
+    file->deleting = 1;  //mark the file as deleted
+    for(i=0; i <= fd_max; i++) //check if the file isn't opened by anyone and definetly delete it if true
     {
       if(FD_ISSET(i, &(file->opened)))
       {
@@ -626,7 +622,7 @@ int deleteFile(struct storage* files, int fd, char* path, int fd_max)
   return ret;
 }
 
-int replace(struct storage* files)
+int replace(struct storage* files, SharedQueue* work_queue)
 {
   int bucket = 0;
   icl_entry_t* curr = NULL;
@@ -634,20 +630,21 @@ int replace(struct storage* files)
   struct timespec victim_time;
   victim_time.tv_sec = 0;
   struct saved_file* file = NULL;
+  struct request* pending_request;
   
   scan_hash_r(files->hashT, &bucket, &curr);
   
-  while(curr != NULL)
+  while(curr != NULL)  //first scansion of has looking for unlocked file
   {
     file = (struct saved_file*) curr->data;
-    if(file->locked == -1 && (timecmp(file->last_access, victim_time) < 0 || victim_time.tv_sec == 0) && file->size != 0)
+    if(file->locked == -1 && (timecmp(file->last_access, victim_time) < 0 || victim_time.tv_sec == 0) && file->size != 0)  //select the file whose last_acces is older
     {
       victim = curr;
       victim_time = file->last_access;
     }
     scan_hash_r(files->hashT, &bucket, &curr);
   }
-  if(victim != NULL)
+  if(victim != NULL)  //if a victim is selected immediatly delete it
   {
     file = (struct saved_file*) victim->data;
     files->used_storage -= file->size;
@@ -659,7 +656,7 @@ int replace(struct storage* files)
   curr = NULL;
   scan_hash_r(files->hashT, &bucket, &curr);
   
-  while(curr != NULL)
+  while(curr != NULL)  //if a victim was not selected by first scansion (there aren't unlocked file) look also to locked file
   {
     file = (struct saved_file*) curr->data;
     if(timecmp(file->last_access, victim_time) < 0 || victim_time.tv_sec == 0)
@@ -670,7 +667,7 @@ int replace(struct storage* files)
     scan_hash_r(files->hashT, &bucket, &curr);
   }
   
-  if(victim == NULL)
+  if(victim == NULL)  //this case should be impossible
   {
     return -1;
   }
@@ -678,13 +675,20 @@ int replace(struct storage* files)
   file = (struct saved_file*) victim->data;
   files->used_storage -= file->size;
   files->n_saved_file--;
+  while(file->wait_queue->head != NULL)  //move requests (if there are) from file's waiting_queue to work_queue (this prevent pending request to be lost)
+  {
+    if(S_dequeue(file->wait_queue, (void**) &pending_request) == 0)
+    {
+      S_enqueue(work_queue, pending_request);
+    }
+  }
   icl_hash_delete(files->hashT, file->name, free_key, free_data);
   return 0;
 }
 
-void scan_hash_r(icl_hash_t* hash, int* bucket, icl_entry_t** curr)
+void scan_hash_r(icl_hash_t* hash, int* bucket, icl_entry_t** curr) //rentrant function for scanning hash 
 {
-  if(*curr == NULL)
+  if(*curr == NULL)  //on first call curr is NULL so ithe first file found is save in curr and its bucket number is also saved 
   {
     *bucket = 0;
     for(int i=0; i < hash->nbuckets; i++)
@@ -699,7 +703,7 @@ void scan_hash_r(icl_hash_t* hash, int* bucket, icl_entry_t** curr)
     return;
   }
   
-  for(int i = *bucket; i < hash->nbuckets; i++)
+  for(int i = *bucket; i < hash->nbuckets; i++)  //starting from curr and bucket passed by the caller find the next file and update curr and bucket
   {
     while((*curr) != NULL && (*curr)->next != NULL)
     {
@@ -719,37 +723,16 @@ void scan_hash_r(icl_hash_t* hash, int* bucket, icl_entry_t** curr)
   *curr = NULL;
 }
 
-void free_key(void* key)
+void free_key(void* key)  //function to free the keys of a file in hash (when icl_hash_delete or icl_hash_destroy is called)
 {
   free(key);
 }
-void free_data(void* data)
+void free_data(void* data) //function to free the data of a file in hash
 {
   struct saved_file* file = (struct saved_file*) data;
-  struct request* tmp_req;
   free(file->buf);
-  while(file->wait_queue->head != NULL)
-  {
-    S_dequeue(file->wait_queue, (void**) &tmp_req);
-    free(tmp_req);
-  }
   free(file->wait_queue);
   free(file);
-}
-
-char* get_path(char* dirname, char* filename)
-{
-  char* path;
-  if((path = malloc((strlen(dirname) + strlen(filename) + 2) * sizeof(char))) == NULL)
-  {
-    errno = ENOMEM;
-    return NULL;
-  }
-  strcpy(path, dirname);
-  path[strlen(dirname)] = '/';
-  path[strlen(dirname) + 1] = '\0';
-  strcat(path, filename);
-  return path;
 }
 
 int timecmp(struct timespec t1, struct timespec t2)
@@ -760,7 +743,7 @@ int timecmp(struct timespec t1, struct timespec t2)
         return t1.tv_sec - t2.tv_sec;
 }
 
-void closeOpenedFile(struct storage* files, int fd, int fd_max)
+void closeOpenedFile(struct storage* files, int fd, int fd_max)  //fuction that close all open files of a specifc client identified by fd (this function is called on client disconnection)
 {
   int bucket = 0;
   int i;
@@ -769,10 +752,10 @@ void closeOpenedFile(struct storage* files, int fd, int fd_max)
   
   scan_hash_r(files->hashT, &bucket, &curr);
   
-  while(curr != NULL)
+  while(curr != NULL)  //all hash is scanned
   {
     file = (struct saved_file*) curr->data;
-    if(FD_ISSET(fd, &(file->opened)) == 1)
+    if(FD_ISSET(fd, &(file->opened)) == 1)  //if file is opened by client close it, eventualy release lock and check if it must be deleted
     {
       FD_CLR(fd, &(file->opened));
       if(file->locked == fd)
@@ -800,11 +783,11 @@ void closeOpenedFile(struct storage* files, int fd, int fd_max)
   }
 }
 
-int my_icl_hash_dump(FILE* stream, icl_hash_t* ht)
+int my_icl_hash_dump(FILE* stream, icl_hash_t* ht)  //fuction tanken by the icl_hash library (credits to Jakub Kurzak) and modified to print the files in a diffenrent format
 {
     icl_entry_t *bucket, *curr;
     int i;
-    fprintf(stream, "Files in storage:\n");
+    fprintf(stream, "files in storage:\n");
     if(!ht) return -1;
 
     for(i=0; i<ht->nbuckets; i++) {

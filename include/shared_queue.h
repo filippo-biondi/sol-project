@@ -1,4 +1,4 @@
-#if !defined(_SHARED_QUEUE)
+#ifndef _SHARED_QUEUE
 #define _SHARED_QUEUE
 
 #include <utils.h>

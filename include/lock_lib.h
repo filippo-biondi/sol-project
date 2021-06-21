@@ -1,4 +1,4 @@
-#if !defined(_LOCK_LIB)
+#ifndef _LOCK_LIB
 #define _LOCK_LIB
 
 #include <pthread.h>
@@ -21,7 +21,7 @@ if(pthread_cond_init(&(cond), NULL) != 0)           \
 if(pthread_mutex_lock(&(mutex)) != 0) \
 {                                     \
   perror("Mutex acquire error");      \
-  return -1;                          \
+  exit(EXIT_FAILURE);                 \
 }                                     \
   
 #define MUTEX_UNLOCK(mutex)             \

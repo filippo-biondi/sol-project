@@ -13,7 +13,7 @@ int main(int argc, char* argv[])
   struct timespec abstime;
   struct timespec sleeptime;
   char* socket_name = NULL;
-  for(int i=1; i < argc; i++)
+  for(int i=1; i < argc; i++) //search for -h -f -t -p
   {
     if(strcmp("-h", argv[i]) == 0)
     {
@@ -78,6 +78,7 @@ int main(int argc, char* argv[])
   if(openConnection(socket_name, MSEC, abstime) == -1)
   {
     perror("Connection failed");
+    free(socket_name);
     exit(EXIT_FAILURE);
   }
   PRINT_OPERATION("Connection opened on socket \"%s\"\n", socket_name)
@@ -87,11 +88,11 @@ int main(int argc, char* argv[])
   opt = getopt(argc, argv, "-:w:W:r:Rd:D:l:u:c:ftp");
   while(opt != -1)
   {
-    if(t != 0 && first != 1 && opt != 1 && opt != ':'&& opt != '?' && opt != 'f' && opt != 't' && opt != 'p' && opt != 'd' && opt != 'D')
+    if(t != 0 && first != 1 && opt != 1 && opt != ':'&& opt != '?' && opt != 'f' && opt != 't' && opt != 'p' && opt != 'd' && opt != 'D') //don't wait if the option is not a request to server
     {
       nanosleep(&sleeptime, NULL);
     }
-    if(execute_command(opt, argc, argv) == 0)
+    if(execute_command(opt, argc, argv) == 0) //return 0 if opt was a request to server else -1
     {
       first = 0;
     }

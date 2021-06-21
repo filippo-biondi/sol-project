@@ -9,7 +9,6 @@ int execute_command(int opt, int argc, char* argv[])
   char* filename;
   char* dirname;
   char* abs_path = NULL;
-  char* abs_dir_path = NULL;
   long int n = 0;
   size_t nbyte = 0;
   char* endptr;
@@ -24,12 +23,7 @@ int execute_command(int opt, int argc, char* argv[])
     case 'w':
       dirname = strtok(optarg, ",");
       CHECK_PATH(dirname)
-      if((abs_dir_path = realpath(dirname, NULL)) == NULL)
-      {
-        PRINT_OPERATION_ERROR("Error while resolving directory path")
-        break;
-      }
-      if((nstring = strtok(NULL, ",")) != NULL && nstring[0] == 'n' && nstring[1] == '=')
+      if((nstring = strtok(NULL, ",")) != NULL && nstring[0] == 'n' && nstring[1] == '=')  //check if number of file is specified and convert it to int
       {
         n = strtol(&(nstring[2]), &endptr, 10);
         if(nstring[2] == '\0' || *endptr != '\0' || n > INT_MAX || n < 0)
@@ -38,14 +32,14 @@ int execute_command(int opt, int argc, char* argv[])
           PRINT_OPERATION("Invalid number as argument of -w, default n=0 value used\n")
         }
       }
-      stat(abs_dir_path, &st);
+      stat(dirname, &st);
       if(!S_ISDIR(st.st_mode))
       {
         errno = ENOTDIR;
         PRINT_OPERATION_ERROR("Bad argument of -w")
         break;
       }
-      nw = writeDir(abs_dir_path, n, &nbyte);
+      nw = writeDir(dirname, n, &nbyte);
       if(nw >= 0)
       {
         PRINT_OPERATION("%ld files written in the server from the directory %s for a total of %ld bytes\n", nw, dirname, nbyte)
@@ -54,11 +48,10 @@ int execute_command(int opt, int argc, char* argv[])
       {
         PRINT_OPERATION_ERROR("Error while writing directory")
       }
-      free(abs_dir_path);
       break;
       
     case 'W':
-      filename = strtok(optarg, ",");
+      filename = strtok(optarg, ",");  //get first file
       
       while(filename != NULL)
       {
@@ -67,47 +60,54 @@ int execute_command(int opt, int argc, char* argv[])
         {
           PRINT_OPERATION_ERROR("Error while resolving path")
           free(abs_path);
-          abs_dir_path = NULL;
           break;
         }
         stat(abs_path, &st);
-        nbyte = st.st_size;
-        if(openFile(abs_path, O_CREATE | O_LOCK) == 0)
+        nbyte = st.st_size;  //writeFile doesn't return number of byte writte so we get that here
+        if(S_ISREG(st.st_mode))  //if is a regular file
         {
-          PRINT_OPERATION("File %s opened in the server\n", abs_path)
-          if(writeFile(abs_path, NULL) == 0)
+          if(openFile(abs_path, O_CREATE | O_LOCK) == 0)
           {
-            PRINT_OPERATION("File %s written in the server for a total of %ld bytes\n", abs_path, nbyte)
+            PRINT_OPERATION("File %s opened in the server\n", abs_path)
+            
+            if(writeFile(abs_path, NULL) == 0)  //write only if open succeded
+            {
+              PRINT_OPERATION("File %s written in the server for a total of %ld bytes\n", abs_path, nbyte)
+            }
+            else
+            {
+              PRINT_OPERATION_ERROR("Error while writing file")
+            }
+            if(closeFile(abs_path) == 0) //close even if write failed
+            {
+              PRINT_OPERATION("File %s closed\n", abs_path)
+            }
+            else
+            {
+              PRINT_OPERATION_ERROR("Error while closing file")
+            }
           }
           else
           {
-            PRINT_OPERATION_ERROR("Error while writing file")
-          }
-          if(closeFile(abs_path) == 0)
-          {
-            PRINT_OPERATION("File %s closed\n", abs_path)
-          }
-          else
-          {
-            PRINT_OPERATION_ERROR("Error while closing file")
+            PRINT_OPERATION_ERROR("Error in file opening")
           }
         }
         else
         {
-          PRINT_OPERATION_ERROR("Error in file opening")
+          PRINT_OPERATION("%s is not a regular file\n", abs_path)
         }
+        filename = strtok(NULL, ",");  //get next file
         free(abs_path);
-        filename = strtok(NULL, ",");
       }
       break;
       
-    case 'D':
+    case 'D': //not implemented
       ret = -1;
       break;
       
     case 'r':
       dirname = NULL;
-      if((ind = find(argc, argv, optind, 'd')) != -1)
+      if((ind = find(argc, argv, optind, 'd')) != -1)  //search for -d after -r
       {
         dirname = argv[ind];
         CHECK_PATH(dirname)
@@ -116,7 +116,6 @@ int execute_command(int opt, int argc, char* argv[])
         {
           errno = ENOTDIR;
           PRINT_OPERATION_ERROR("Bad argument of -d")
-          free(abs_dir_path);
           break;
         }
       }
@@ -128,8 +127,6 @@ int execute_command(int opt, int argc, char* argv[])
         if((abs_path = realpath(filename, NULL)) == NULL)
         {
           PRINT_OPERATION_ERROR("Error while resolving path")
-          free(abs_path);
-          abs_dir_path = NULL;
           break;
         }
         if(openFile(abs_path, 0) == 0)
@@ -147,6 +144,7 @@ int execute_command(int opt, int argc, char* argv[])
               
               PRINT_OPERATION("File saved in directory %s\n", dirname)
             }
+            free(buf);
           }
           if(closeFile(abs_path) == 0)
           {
@@ -162,22 +160,21 @@ int execute_command(int opt, int argc, char* argv[])
           PRINT_OPERATION_ERROR("Error in file opening")
         }
         free(abs_path);
+        
         filename = strtok(NULL, ",");
-      }
-      if(dirname != NULL)
-      {
-        free(abs_dir_path);
       }
       break;
     case 'R':
-      abs_dir_path = NULL;
-      if((ind = find(argc, argv, optind, 'd')) != -1)
+      dirname = NULL;
+      if((ind = find(argc, argv, optind, 'd')) != -1)  //search for -d after -R
       {
         dirname = argv[ind];
         CHECK_PATH(dirname)
-        if((abs_dir_path = realpath(dirname, NULL)) == NULL)
+        stat(dirname, &st);
+        if(!S_ISDIR(st.st_mode))
         {
-          PRINT_OPERATION_ERROR("Error while resolving directory path")
+          errno = ENOTDIR;
+          PRINT_OPERATION_ERROR("Bad argument of -d")
           break;
         }
       }
@@ -194,7 +191,7 @@ int execute_command(int opt, int argc, char* argv[])
           }
         }
       }
-      if((n = readNFiles(n, abs_dir_path)) == -1)
+      if((n = readNFiles(n, dirname)) == -1)
       {
         if(errno == EIO)
         {
@@ -215,7 +212,7 @@ int execute_command(int opt, int argc, char* argv[])
       }
       break;
            
-    case 'd':
+    case 'd':  //check if there is a -r or -R before -d and print error if there isn't
       ret = -1;
       ind = find(argc, argv, 1, 'r');
       if(ind > optind || ind == -1)
@@ -228,7 +225,7 @@ int execute_command(int opt, int argc, char* argv[])
       }
       break;
            
-    case 't':
+    case 't':  //do nothing, -t already read in main
       ret = -1;
       break;
            
@@ -241,10 +238,9 @@ int execute_command(int opt, int argc, char* argv[])
         {
           PRINT_OPERATION_ERROR("Error while resolving path")
           free(abs_path);
-          abs_dir_path = NULL;
           break;
         }
-        if(openFile(abs_path, 0) == 0)
+        if(openFile(abs_path, 0) == 0)  //open without flags
         {
           PRINT_OPERATION("File %s opened in the server\n", abs_path)
           if(lockFile(abs_path) == 0)
@@ -274,7 +270,6 @@ int execute_command(int opt, int argc, char* argv[])
         {
           PRINT_OPERATION_ERROR("Error while resolving path")
           free(abs_path);
-          abs_dir_path = NULL;
           break;
         }
         if(unlockFile(abs_path) == 0)
@@ -299,7 +294,6 @@ int execute_command(int opt, int argc, char* argv[])
         {
           PRINT_OPERATION_ERROR("Error while resolving path")
           free(abs_path);
-          abs_dir_path = NULL;
           break;
         }
         if(removeFile(abs_path) == 0)
@@ -315,11 +309,11 @@ int execute_command(int opt, int argc, char* argv[])
       }
       break;
            
-    case 'p':
+    case 'p':  //do nothing, -p already read in main
       ret = -1;
       break;
       
-    case 'f':
+    case 'f':  //do nothing, -f already read in main
       ret = -1;
       break;
     

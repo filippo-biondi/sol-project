@@ -12,28 +12,26 @@ void* signal_handler(void* arg)
   sigaddset(&set, SIGQUIT);
   sigaddset(&set, SIGHUP); 
   
-  while(1)
-  {
-    r = sigwait(&set, &sig);
-	  if (r != 0) 
-	  {
-	    errno = r;
-	    perror("Sigwait error");
-	    return NULL;
-	  }
+ r = sigwait(&set, &sig);  //wait for one of the 3 signal
+ if (r != 0) 
+ {
+   errno = r;
+   perror("Sigwait error");
+   return NULL;
+ }
 
-	  switch(sig) 
-	  {
-	    case SIGINT:
-	    case SIGQUIT:
-	      *terminate = -1;
-	      close(((struct handler_args*) arg)->pipe_fd);
-	      return NULL;
-	      
-	    case SIGHUP:
-	      *terminate = 1;
-	      close(((struct handler_args*) arg)->pipe_fd);
-	      return NULL; 
-	  }
-  }   
+ switch(sig) 
+ {
+   case SIGINT:
+   case SIGQUIT:
+     *terminate = -1;  //inform main thread that he has to terminate immediatly
+     close(((struct handler_args*) arg)->pipe_fd);  //wake up main from select 
+     return NULL;
+     
+   case SIGHUP:
+     *terminate = 1;  //inform main thread to not accept new connection and to terminate when all client are disconnected
+     close(((struct handler_args*) arg)->pipe_fd);  //wake up main from select 
+    return NULL;
+	}
+	return NULL;
 }

@@ -1,21 +1,23 @@
 #include <utils.h>
 #include <i_conn.h>
 
-int timecmp(struct timespec t1, struct timespec t2)
-{
-    if (t1.tv_sec == t2.tv_sec)
-        return t1.tv_nsec - t2.tv_nsec;
-    else
-        return t1.tv_sec - t2.tv_sec;
-}
 
-struct firstmessage
-{
-  char op;
-  size_t size1;
-  size_t size2;
-};
+/* legend for op:
+client:                         server:
+o: open a file                  y: operation executet correctly
+r: read a file                  e: file already exist (only in open)
+R: read many file               n: file doesn't exist
+w: write a file                 p: permission denied for operation
+a: append to a file             t: file too large
+l: lock a file                  other: error in communication
+u: unlock a file
+c: close a file
+d: delete a file
 
+
+
+
+*/
 int fd_skt;
 struct sockaddr_un sa;
 int connected = 0;
@@ -156,10 +158,9 @@ int readFile(const char* pathname, void** buf, size_t* size)
         *size = response.size1;
         if((*buf = malloc(*size)) == NULL)
         {
-          errno = ENOMEM;
           return -1;
         }
-        while((byte_read += read(fd_skt, *buf + byte_read, *size - byte_read)) != *size)
+        while((byte_read += read(fd_skt, *buf + byte_read, *size - byte_read)) != *size) //while loop is necessary for reading large file 
         {
           if(errno != 0)
           {
@@ -189,7 +190,7 @@ int readNFiles(int N, const char* dirname)
   void* buf;
   int files_read = 0;
   int save_err = 0;
-  int written_bytes = 0;
+  int read_bytes = 0;
   struct firstmessage message;
   struct firstmessage response;
   if(connected)
@@ -212,7 +213,7 @@ int readNFiles(int N, const char* dirname)
           errno = ECOMM;
           return -1;
         }
-        while(len_buf != 0)
+        while(len_buf != 0)  //read until server send a firstmessafe with len_buf == 0, this means that sending of file is ended
         {
           if((path = malloc(len_path)) == NULL || (buf = malloc(len_buf)) == NULL)
           {
@@ -225,7 +226,7 @@ int readNFiles(int N, const char* dirname)
             return -1;
           }
           errno = 0;
-          while((written_bytes += read(fd_skt, buf + written_bytes, len_buf - written_bytes)) != len_buf)
+          while((read_bytes += read(fd_skt, buf + read_bytes, len_buf - read_bytes)) != len_buf)
           {
             if(errno != 0)
             {
@@ -233,9 +234,9 @@ int readNFiles(int N, const char* dirname)
               return -1;
             }
           }
-          written_bytes = 0;
+          read_bytes = 0;
           files_read++;
-          if(dirname != NULL && saveInDir(dirname, path, buf, len_buf) == -1)
+          if(dirname != NULL && saveInDir(dirname, path, buf, len_buf) == -1)  //try to save file in specified directory
           {
             save_err = 1;
           }
@@ -268,38 +269,66 @@ int readNFiles(int N, const char* dirname)
 
 int writeFile(const char* pathname, const char* dirname)
 {
+  long int written_byte = 0;
+  FILE* fdW;
+  void* buf;
+  struct stat st;
   struct firstmessage message;
   struct firstmessage response;
   if(connected)
   {
     message.op = 'w';
     message.size1 = (strnlen(pathname, PATH_MAX-1) + 1) * sizeof(char);
-    if(dirname == NULL)
-    { 
-      message.size2 = 0;
-    }
-    else
+    stat(pathname, &st);
+    message.size2 = st.st_size;
+    if((buf = malloc(st.st_size)) == NULL)
     {
-      message.size2 = (strnlen(dirname, PATH_MAX-1) + 1) * sizeof(char);
+      return -1;
     }
+    if((fdW = fopen(pathname, "rb")) == NULL)  //file is opened and then read from secondary memory
+    {
+      return -1;
+    }
+    if(fread(buf, st.st_size, 1, fdW) != 1)
+    {
+      fclose(fdW);
+      return -1;
+    }
+    fclose(fdW);
     SEND_FIRST_MESSAGE(message)
     SEND_PATHNAME(pathname)
-    if(dirname != NULL)
+    
+    errno = 0;
+    while((written_byte += write(fd_skt, buf + written_byte, st.st_size - written_byte)) != st.st_size)  //while loop is necessary for sending large file 
     {
-      SEND_DIRNAME(dirname)
+      if(errno != 0)
+      {
+        break;
+      }
     }
+    if(errno != 0)
+    {
+      free(buf);
+      errno = ECOMM;
+      return -1;
+    }
+    
     READ_RESPONSE(response)
     switch(response.op)
     {
       case 'y':
+        free(buf);
         return 0;
       case 'p':
+        free(buf);
         errno = EPERM;
         return -1;
         case 't':
+        free(buf);
         errno = EFBIG;
         return -1;
       default:
+        free(buf);
         errno = ECOMM;
         return -1;
     }
@@ -324,18 +353,7 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
     SEND_FIRST_MESSAGE(message)
     SEND_PATHNAME(pathname)
     errno = 0;
-    while((written_byte += write(fd_skt, buf + written_byte, size - written_byte)) != size)
-    {
-      if(errno != 0)
-      {
-        break;
-      }
-    }
-    if(errno != 0)
-    {
-      errno = ECOMM;
-      return -1;
-    }
+    SEND_BUF(buf, size);
     
     READ_RESPONSE(response)
     switch(response.op)
@@ -411,6 +429,9 @@ int unlockFile(const char* pathname)
       case 'n':
         errno = ENOENT;
         return -1;
+      case 'p':
+        errno = EPERM;
+        return -1;
       default:
         errno = ECOMM;
         return -1;
@@ -440,6 +461,9 @@ int closeFile(const char* pathname)
         return 0;
       case 'n':
         errno = ENOENT;
+        return -1;
+      case 'p':
+        errno = EPERM;
         return -1;
       default:
         errno = ECOMM;
@@ -481,30 +505,4 @@ int removeFile(const char* pathname)
     errno = ENOTCONN;
     return -1;
   }
-}
-
-int saveInDir(const char* dirname, char* filename, void* buf, size_t size)
-{
-  char* complete_path;
-  int fd;
-  if((complete_path = get_path(dirname, filename)) == NULL)
-  {
-    return -1;
-  }
-  if((fd = open(complete_path, O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU | S_IRWXO)) == -1)
-  {
-    free(complete_path);
-    return -1;
-  }
-  if(write(fd, buf, size) != size)
-  {
-    free(complete_path);
-    return -1;
-  }
-  if(close(fd) == -1)
-  {
-    free(complete_path);
-    return -1;
-  }
-  return 0;
 }
