@@ -1,5 +1,11 @@
 #include <server_op.h>
 
+
+void free_recived(void* recived)
+{
+  free(recived);
+}
+
 void* worker_routine(void* arg)
 {
   int negfd;
@@ -16,28 +22,31 @@ void* worker_routine(void* arg)
   long int byte_read = 0;
   int client_disc;
   long int written_bytes = 0;
+  int wr_error = 0;
   
   memset(&response, 0, sizeof(struct firstmessage));
   MALLOC(recived, sizeof(struct firstmessage))
   
+  pthread_cleanup_push(free_recived, recived);
+  
   while(1)
   {
-    if(S_dequeue(((struct thread_args*) arg)->work_queue, (void**) &request) == -1)
+    if(S_dequeue(((struct thread_args*) arg)->work_queue, (void**) &request) == -1)  //try to read a request, if there aren't thread wait on a condition variable (see in shared_queue.c)
     {
       perror("Error in worker queue");
-      exit(EXIT_FAILURE);
+      pthread_exit(NULL);
     }
     
     fd = request->fd;
     
-    if(request->t != 'n')
+    if(request->t != 'n')  //if is a pending request
     {
       recived->op = request->t;
       recived->size1 = strlen(request->path) + 1;
     }
-    else
+    else  //if is a new request
     {
-      if(request->fd == -1)
+      if(fd == -1)  //if is a termination signal put back the request in the queue and exit from the loop
       {
         if(S_insert_tail(((struct thread_args*) arg)->work_queue, request))
 	      {
@@ -46,7 +55,7 @@ void* worker_routine(void* arg)
 	      break;
       }
       
-      READ_FIRST_MESSAGE(recived)
+      READ_FIRST_MESSAGE(recived)  //else read the message from client
       
     }
     client_disc = 0;
@@ -54,26 +63,26 @@ void* worker_routine(void* arg)
     switch(recived->op)
     {
       case 'o':
-        if(request->t == 'n')
+        if(request->t == 'n')  //if is a new request read path and flags from client
         {
           MALLOC(path, recived->size1)
           READ_PATH(path, recived->size1)
-          if(read(request->fd, &flags, recived->size2) != recived->size2)
+          if(read(fd, &flags, recived->size2) != recived->size2)
           {
             printf("Invalid message\n");
             response.op = 'b';
-            SEND_FIRST_MESSAGE(response)
             free(path);
+            SEND_FIRST_MESSAGE(response)
             break;
           }
         }
-        else
+        else  //else take them from the pending request
         {
           path = request->path;
           flags = request->flags;
         }
       
-        if(openFile(files, request->fd, path, flags) == -1)
+        if(openFile(files, fd, path, flags) == -1)
         {
           if(errno == EEXIST)
           {
@@ -87,7 +96,7 @@ void* worker_routine(void* arg)
           {
             response.op = 'p';
           }
-          if(errno == EACCES)
+          if(errno == EACCES)  //can't access the file because lock is holded by another client, the request has already been enqueued in file's waiting queue
           {
             free(request);
             break;
@@ -97,9 +106,9 @@ void* worker_routine(void* arg)
         {
           response.op = 'y';
         }
-        SEND_FIRST_MESSAGE(response)
         free(request);
         free(path);
+        SEND_FIRST_MESSAGE(response)
         break;
         
       case 'r':
@@ -113,7 +122,7 @@ void* worker_routine(void* arg)
         {
           path = request->path;
         }
-        if(readFile(files, request->fd, path, &buf, &size) == -1)
+        if(readFile(files, fd, path, &buf, &size) == -1)
         {
           if(errno == EACCES)
           {
@@ -123,17 +132,17 @@ void* worker_routine(void* arg)
           else if(errno == EPERM)
           {
             response.op = 'p';
-            SEND_FIRST_MESSAGE(response)
             free(request);
             free(path);
+            SEND_FIRST_MESSAGE(response)
             break;
           }
           else
           {
             response.op = 'n';
-            SEND_FIRST_MESSAGE(response)
             free(request);
             free(path);
+            SEND_FIRST_MESSAGE(response)
             break;
           }
         }
@@ -141,11 +150,11 @@ void* worker_routine(void* arg)
         {
           response.op = 'y';
           response.size1 = size;
+          errno = 0;
           SEND_FIRST_MESSAGE(response)
-          if(client_disc == 0)
+          if(client_disc == 0 && errno == 0)  //if client is still connected (client_disc could be updated in SEND_FIRST_MESSAGE if errno == EPIPE) and no other errors on write have occured 
           {
-            errno = 0;
-            while((written_bytes += write(request->fd, buf + written_bytes, size - written_bytes)) != size)
+            while((written_bytes += write(fd, buf + written_bytes, size - written_bytes)) != size)
             {
               if(errno != 0)
               {
@@ -154,15 +163,15 @@ void* worker_routine(void* arg)
             }
             written_bytes = 0;
           }
-            
+ 
           if(errno == EPIPE)
           {
             client_disc = 1;
           }
           else if(errno != 0)
           {  
-            perror("Writing error");                                              
-            exit(EXIT_FAILURE);
+            perror("Writing error");                                          
+            wr_error = 1;  //this cause the connection to the client to be interrupted (see after the end of switch)
           }
         }
         free(path);
@@ -171,7 +180,7 @@ void* worker_routine(void* arg)
         break;
         
       case 'R':
-        if(read(request->fd, &N, recived->size1) != recived->size1)
+        if(read(fd, &N, recived->size1) != recived->size1)
         {
           printf("Invalid message\n");
           response.op = 'b';
@@ -179,14 +188,18 @@ void* worker_routine(void* arg)
           break;
         }
         
-        if(readNFile(files, request->fd, N) == -1)
+        if(readNFile(files, fd, N) == -1)
         {
           if(errno == EPIPE)
           {
             client_disc = 1;
           }
-          perror("error in file reading");
-        }
+          else
+          {
+            perror("error in file reading");
+            wr_error = 1;
+          }
+        } 
         free(request);
         break;
         
@@ -195,7 +208,7 @@ void* worker_routine(void* arg)
         READ_PATH(path, recived->size1)
         MALLOC(buf, recived->size2)
         READ_BUF(buf, recived->size2)
-        if(writeFile(files, request->fd, path, buf, recived->size2, NULL) == -1)
+        if(writeFile(arg, fd, path, buf, recived->size2, NULL) == -1)
         {
           if(errno == EPERM)
           {
@@ -214,11 +227,10 @@ void* worker_routine(void* arg)
         {
           response.op = 'y';
         }
-        
-        SEND_FIRST_MESSAGE(response)
         free(request);
         free(path);
         free(buf);
+        SEND_FIRST_MESSAGE(response)        
         break;
         
       case 'a':
@@ -236,7 +248,7 @@ void* worker_routine(void* arg)
           buf = request->buf;
           recived->size2 = request->buf_len;
         }
-        if(appendFile(files, request->fd, path, buf, recived->size2, NULL) == -1)
+        if(appendFile(arg, fd, path, buf, recived->size2, NULL) == -1)
         {
           if(errno == EACCES)
           {
@@ -260,23 +272,24 @@ void* worker_routine(void* arg)
         {
           response.op = 'y';
         }
-        SEND_FIRST_MESSAGE(response)
         free(request);
         free(path);
         free(buf);
+        SEND_FIRST_MESSAGE(response)
         break;
       
       case 'l':
-        MALLOC(path, recived->size1)
+        
         if(request->t == 'n')
         {
+          MALLOC(path, recived->size1)
           READ_PATH(path, recived->size1)
         }
         else
         {
-          strcpy(path, request->path);
+          path = request->path;
         }
-        if(lock(files, request->fd, path) == -1)
+        if(lock(files, fd, path) == -1)
         {
           if(errno == EACCES)
           {
@@ -297,15 +310,15 @@ void* worker_routine(void* arg)
         {
           response.op = 'y';
         }
-        SEND_FIRST_MESSAGE(response)
         free(request);
         free(path);
+        SEND_FIRST_MESSAGE(response)
         break;
         
       case 'u':
         MALLOC(path, recived->size1)
         READ_PATH(path, recived->size1)
-        if(unlock(arg, request->fd, path) == -1)
+        if(unlock(arg, fd, path) == -1)
         {
           response.op = 'n';
         }
@@ -313,15 +326,15 @@ void* worker_routine(void* arg)
         {
           response.op = 'y';
         }
-        SEND_FIRST_MESSAGE(response)
         free(request);
         free(path);
+        SEND_FIRST_MESSAGE(response)
         break;
         
       case 'c':
         MALLOC(path, recived->size1)
         READ_PATH(path, recived->size1)
-        if(closeFile(arg, request->fd, path, *(((struct thread_args*) arg)->fd_max)) == -1)
+        if(closeFile(arg, fd, path, *(((struct thread_args*) arg)->fd_max)) == -1)
         {
           response.op = 'n';
         }
@@ -329,15 +342,15 @@ void* worker_routine(void* arg)
         {
           response.op = 'y';
         }
-        SEND_FIRST_MESSAGE(response)
         free(request);
         free(path);
+        SEND_FIRST_MESSAGE(response)
         break;
         
       case 'd':
         MALLOC(path, recived->size1)
         READ_PATH(path, recived->size1)
-        if(deleteFile(files, request->fd, path, *(((struct thread_args*) arg)->fd_max)) == -1)
+        if(deleteFile(files, fd, path, *(((struct thread_args*) arg)->fd_max)) == -1)
         {
           response.op = 'n';
         }
@@ -345,37 +358,37 @@ void* worker_routine(void* arg)
         {
           response.op = 'y';
         }
-        SEND_FIRST_MESSAGE(response)
         free(request);
         free(path);
+        SEND_FIRST_MESSAGE(response)
         break;
       default:
         printf("Invalid request\n");
         response.op = 'b';
-        SEND_FIRST_MESSAGE(response)
         free(request);
+        SEND_FIRST_MESSAGE(response)
         break;
     }
     
-    if(client_disc == 1)
+    if(client_disc == 1 || wr_error == 1)  //if client disconnected or an error on write has occured inform main thread that client is disconnected
     {
       closeOpenedFile(files, fd, *(((struct thread_args*) arg)->fd_max));
       negfd = -(fd);
-      //free(request);
       if(write(((struct thread_args*) arg)->pipe_fd, &negfd, sizeof(int)) != sizeof(int))
       {
         perror("Pipe error:");
-        exit(EXIT_FAILURE);
+        pthread_exit(NULL);
       }
+      wr_error = 0;
       continue;
     }
     
-    if(write(((struct thread_args*) arg)->pipe_fd, &fd, sizeof(int)) != sizeof(int))
+    if(write(((struct thread_args*) arg)->pipe_fd, &fd, sizeof(int)) != sizeof(int))  //else inform that client request has been executed and is possible to accept other request 
     {
       perror("Pipe error:");
-      exit(EXIT_FAILURE);
+      pthread_exit(NULL);
     }
   }
-  free(recived);
+  pthread_cleanup_pop(1);
   return NULL;
 }
