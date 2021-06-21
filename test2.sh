@@ -27,12 +27,12 @@ sleep 0.5
 #read all file saved in the server and save them in dest (rf2.txt should not be in dest because is locked)
 
 ./bin/client -p -f socket -w random_file 
-#write all files from random_file and it's subdirectory random_file2 (this will cause the replacement algorithm to run multiple times)
+#write all files from random_file and it's subdirectory random_file2, this will cause the replacement algorithm to run multiple times (not all files will be written because some are too big)
 
 ./bin/client -p -t 500 -f socket -c random_file/random_file2/rf19 -c random_file/random_file2/rf20
 #remove rf19 and rf20 from the server (succeed because rf19 and rf20 are the last inserted file and no other operation have been made in the server so replacement algorithm didn't removed them)
 ./bin/client -p -f socket -R -d dest/dest2
-#read all file saved in the server and save them in dest2 (this shoud match with the file list that server print on exit after reciving the signal exept for rf2.txt whitch is locked)
+#read all file saved in the server and save them in dest2 (this shoud match with the file list that server print on exit after reciving the signal, exept for rf2.txt whitch is locked)
 
 kill -1 ${SERVER_PID}
-#server exit only after lock on rf2 has been released
+#server exit only after lock on rf2 has been released (if signal would have been a SIGINT or SIGQUIT server woulbe be exited immediatly)
