@@ -1,5 +1,5 @@
 CC		=  gcc
-CFLAGS	  += -std=c99 -Wall -g -pthread
+CFLAGS	  	+= -std=c99 -Wall -g -pthread
 INCLUDES	= -I ./include
 LDFLAGS 	= -Wl,-rpath,./lib -L ./lib
 
