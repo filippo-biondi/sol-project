@@ -98,6 +98,7 @@ int execute_command(int opt, int argc, char* argv[])
         }
         filename = strtok(NULL, ",");  //get next file
         free(abs_path);
+        abs_path = NULL;
       }
       break;
       
@@ -162,6 +163,7 @@ int execute_command(int opt, int argc, char* argv[])
         free(abs_path);
         
         filename = strtok(NULL, ",");
+        abs_path = NULL;
       }
       break;
     case 'R':
@@ -258,6 +260,7 @@ int execute_command(int opt, int argc, char* argv[])
         }
         free(abs_path);
         filename = strtok(NULL, ",");
+        abs_path = NULL;
       }
       break;
            
@@ -282,6 +285,7 @@ int execute_command(int opt, int argc, char* argv[])
         }
           free(abs_path);
           filename = strtok(NULL, ",");
+          abs_path = NULL;
       }
       break;
            
@@ -306,6 +310,7 @@ int execute_command(int opt, int argc, char* argv[])
         }
         free(abs_path);
         filename = strtok(NULL, ",");
+        abs_path = NULL;
       }
       break;
            
