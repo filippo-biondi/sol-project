@@ -30,7 +30,7 @@ sleep 0.5
 #write all files from random_file and it's subdirectory random_file2, this will cause the replacement algorithm to run multiple times (not all files will be written because some are too big)
 
 ./bin/client -p -t 500 -f socket -c random_file/random_file2/rf19 -c random_file/random_file2/rf20
-#remove rf19 and rf20 from the server (succeed because rf19 and rf20 are the last inserted file and no other operation have been made in the server so replacement algorithm didn't removed them)
+#remove rf19 and rf20 from the server (not guaranteed to succeed because file are not written in a specific order so they could have been replaced)
 ./bin/client -p -f socket -R -d dest/dest2
 #read all file saved in the server and save them in dest2 (this shoud match with the file list that server print on exit after reciving the signal, exept for rf2.txt whitch is locked)
 
