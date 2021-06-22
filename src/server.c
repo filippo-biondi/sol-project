@@ -273,7 +273,12 @@ int main(int argc, char* argv[])
 	      
 	      FD_CLR(fd, &set);  //don't listen anymore for request from client untill worker will notyfy that the request has been executed
 	         
-	      MALLOC(new_request, sizeof(struct request))  //create a new request
+	      if((new_request = malloc(sizeof(struct request))) == NULL)  //create a new request
+	      {
+	        perror("Error in malloc");
+          pthread_kill(sighandler_thread, 2);
+          break;
+	      }  
 	      new_request->t = 'n';  //indicate a new request (and not a pending request)
 	      new_request->fd = fd;
 	      new_request->path = NULL;
@@ -284,30 +289,37 @@ int main(int argc, char* argv[])
 	      {
 	        perror("Error in worker queue");
           pthread_kill(sighandler_thread, 2);
+          break;
 	      }
 	    }
 	  }
 	}
 	pthread_join(sighandler_thread, NULL);
 
-	MALLOC(new_request, sizeof(struct request))  //request for signaling to worker that it's time to exit
-	new_request->t = 'n';
-	new_request->fd = -1;
-	new_request->path = NULL;
-	new_request->buf = NULL;
-	new_request->buf_len = 0;
-	
-	if(S_insert_tail(&work_queue, new_request) != 0)
+	if((new_request = malloc(sizeof(struct request))) == NULL)  //request for signaling to worker that it's time to exit
 	{
-	  perror("Error in worker queue");
-  }
-  else
-  {	
-	  for(int i=0; i < n_worker; i++)
+	  perror("Error in malloc");
+	}
+	else
+	{
+	  new_request->t = 'n';
+	  new_request->fd = -1;
+	  new_request->path = NULL;
+	  new_request->buf = NULL;
+	  new_request->buf_len = 0;
+	  
+	  if(S_insert_tail(&work_queue, new_request) != 0)
 	  {
-	    if(pthread_join(workers[i], NULL) != 0)
+	    perror("Error in worker queue");
+    }
+    else
+    {	
+	    for(int i=0; i < n_worker; i++)
 	    {
-	      perror("Error in thread join");
+	      if(pthread_join(workers[i], NULL) != 0)
+	      {
+	        perror("Error in thread join");
+	      }
 	    }
 	  }
 	}

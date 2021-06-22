@@ -25,7 +25,7 @@ void* worker_routine(void* arg)
   int wr_error = 0;
   
   memset(&response, 0, sizeof(struct firstmessage));
-  MALLOC(recived, sizeof(struct firstmessage))
+  WORKER_MALLOC(recived, sizeof(struct firstmessage))
   
   pthread_cleanup_push(free_recived, recived);
   
@@ -65,7 +65,7 @@ void* worker_routine(void* arg)
       case 'o':
         if(request->t == 'n')  //if is a new request read path and flags from client
         {
-          MALLOC(path, recived->size1)
+          WORKER_MALLOC(path, recived->size1)
           READ_PATH(path, recived->size1)
           if(read(fd, &flags, recived->size2) != recived->size2)
           {
@@ -115,7 +115,7 @@ void* worker_routine(void* arg)
         
         if(request->t == 'n')
         {
-          MALLOC(path, recived->size1)
+          WORKER_MALLOC(path, recived->size1)
           READ_PATH(path, recived->size1)
         }
         else
@@ -204,9 +204,9 @@ void* worker_routine(void* arg)
         break;
         
       case 'w':
-        MALLOC(path, recived->size1)
+        WORKER_MALLOC(path, recived->size1)
         READ_PATH(path, recived->size1)
-        MALLOC(buf, recived->size2)
+        MALLOC_BUF(buf, recived->size2)
         READ_BUF(buf, recived->size2)
         if(writeFile(arg, fd, path, buf, recived->size2, NULL) == -1)
         {
@@ -237,9 +237,9 @@ void* worker_routine(void* arg)
         
         if(request->t == 'n')
         {
-          MALLOC(path, recived->size1)
+          WORKER_MALLOC(path, recived->size1)
           READ_PATH(path, recived->size1)
-          MALLOC(buf, recived->size2)
+          MALLOC_BUF(buf, recived->size2)
           READ_BUF(buf, recived->size2)
         }
         else
@@ -282,7 +282,7 @@ void* worker_routine(void* arg)
         
         if(request->t == 'n')
         {
-          MALLOC(path, recived->size1)
+          WORKER_MALLOC(path, recived->size1)
           READ_PATH(path, recived->size1)
         }
         else
@@ -316,7 +316,7 @@ void* worker_routine(void* arg)
         break;
         
       case 'u':
-        MALLOC(path, recived->size1)
+        WORKER_MALLOC(path, recived->size1)
         READ_PATH(path, recived->size1)
         if(unlock(arg, fd, path) == -1)
         {
@@ -332,7 +332,7 @@ void* worker_routine(void* arg)
         break;
         
       case 'c':
-        MALLOC(path, recived->size1)
+        WORKER_MALLOC(path, recived->size1)
         READ_PATH(path, recived->size1)
         if(closeFile(arg, fd, path, *(((struct thread_args*) arg)->fd_max)) == -1)
         {
@@ -348,7 +348,7 @@ void* worker_routine(void* arg)
         break;
         
       case 'd':
-        MALLOC(path, recived->size1)
+        WORKER_MALLOC(path, recived->size1)
         READ_PATH(path, recived->size1)
         if(deleteFile(files, fd, path, *(((struct thread_args*) arg)->fd_max)) == -1)
         {

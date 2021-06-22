@@ -42,7 +42,7 @@ int openFile(struct storage* files, int fd, char* path, int flags)
         file->buf = NULL;
         file->size = 0;
         file->deleting = 0;
-        MALLOC(file->wait_queue, sizeof(SharedQueue));
+        MALLOC_OP(file->wait_queue, sizeof(SharedQueue));
         initQueue(file->wait_queue);
         MUTEX_INIT(file->mutex)
         clock_gettime(CLOCK_REALTIME, &(file->last_access));
@@ -86,7 +86,7 @@ int openFile(struct storage* files, int fd, char* path, int flags)
       {
         if(file->locked != fd && file->locked != -1)  //if lock is owned by another client create a new pending request and put it in waiting queue of ile
         {
-          MALLOC(wait_request, sizeof(struct request))
+          MALLOC_OP(wait_request, sizeof(struct request))
           wait_request->t = 'o';
           wait_request->fd = fd;
           wait_request->path = path;
@@ -136,7 +136,7 @@ int readFile(struct storage* files, int fd, char* path, void** buf, size_t* size
     {
       if(file->locked != fd && file->locked != -1)
       {
-        MALLOC(wait_request, sizeof(struct request))
+        MALLOC_OP_R(wait_request, sizeof(struct request))
         wait_request->t = 'r';
         wait_request->fd = fd;
         wait_request->path = path;
@@ -267,51 +267,54 @@ int writeFile(struct thread_args* args, int fd, char* path, void* buf, size_t si
   }
   else
   {
-    if(file->size != 0 || file->locked != fd)  //file must be locked and not yet written
+    if(file->size != 0 || file->locked != fd)  //file must be locked and not written yet
     {
       errno = EPERM;
       ret = -1;
     }
-        if(size <= files->max_storage)  //file can be stored in server
+    else
+    {
+      if(size <= files->max_storage)  //file can be stored in server
+      {
+        if((file->buf = malloc(size)) == NULL)
         {
-          if((file->buf = malloc(size)) == NULL)
-          {
-            ret = -1;
-          }
-          else
-          {
-            temp_vict = files->n_victim;
-            while(files->used_storage + size > files->max_storage || files->n_saved_file + 1 > files->max_n_file)  //execute replacement algorithm utill file can be written without exceding limits
-            {
-              replace(files, args->work_queue);
-              files->n_victim++;
-            }
-            if(temp_vict != files->n_victim)  //a replacement has been made (a replacement can cause multiple victime file to be removed)
-            {
-              files->n_replacement++;
-            }
-            memcpy(file->buf, buf, size);
-            file->size = size;
-            files->used_storage += size;
-            files->n_saved_file++;
-            clock_gettime(CLOCK_REALTIME, &(file->last_access));
-            
-            if(files->used_storage > files->max_reached_storage)
-            {
-              files->max_reached_storage = files->used_storage;
-            }
-            if(files->n_saved_file > files->max_reached_n_file)
-            {
-              files->max_reached_n_file = files->n_saved_file;
-            }
-          }
+          ret = -1;
         }
         else
         {
-          file->deleting = 1;
-          errno = EFBIG;
-          ret = -1;
+          temp_vict = files->n_victim;
+          while(files->used_storage + size > files->max_storage || files->n_saved_file + 1 > files->max_n_file)  //execute replacement algorithm utill file can be written without exceding limits
+          {
+            replace(files, args->work_queue);
+            files->n_victim++;
+          }
+          if(temp_vict != files->n_victim)  //a replacement has been made (a replacement can cause multiple victime file to be removed)
+          {
+            files->n_replacement++;
+          }
+          memcpy(file->buf, buf, size);
+          file->size = size;
+          files->used_storage += size;
+          files->n_saved_file++;
+          clock_gettime(CLOCK_REALTIME, &(file->last_access));
+          
+          if(files->used_storage > files->max_reached_storage)
+          {
+            files->max_reached_storage = files->used_storage;
+          }
+          if(files->n_saved_file > files->max_reached_n_file)
+          {
+            files->max_reached_n_file = files->n_saved_file;
+          }
         }
+      }
+      else
+      {
+        file->deleting = 1;
+        errno = EFBIG;
+        ret = -1;
+      }
+    }
   }
   
   WRITER_UNLOCK
@@ -349,7 +352,7 @@ int appendFile(struct thread_args* args, int fd, char* path, void* buf, size_t s
       {
         if(file->locked != fd && file->locked != -1)
         {
-          MALLOC(wait_request, sizeof(struct request))
+          MALLOC_OP(wait_request, sizeof(struct request))
           wait_request->t = 'a';
           wait_request->fd = fd;
           wait_request->path = path;
@@ -438,7 +441,7 @@ int lock(struct storage* files, int fd, char* path)
     {
       if(file->locked != fd && file->locked != -1)
       {
-        MALLOC(wait_request, sizeof(struct request))
+        MALLOC_OP(wait_request, sizeof(struct request))
         wait_request->t = 'l';
         wait_request->fd = fd;
         wait_request->path = path;
@@ -451,8 +454,11 @@ int lock(struct storage* files, int fd, char* path)
         }
         ret = -1;
       }
-      file->locked = fd;
-      clock_gettime(CLOCK_REALTIME, &(file->last_access));
+      else
+      {
+        file->locked = fd;
+        clock_gettime(CLOCK_REALTIME, &(file->last_access));
+      }
     }
     else
     {
@@ -502,8 +508,6 @@ int unlock(struct thread_args* args, int fd, char* path)
             S_enqueue(args->work_queue, pending_request);
           }
         }
-        
-        
       }
     }
     else
@@ -730,7 +734,18 @@ void free_key(void* key)  //function to free the keys of a file in hash (when ic
 void free_data(void* data) //function to free the data of a file in hash
 {
   struct saved_file* file = (struct saved_file*) data;
+  struct request* tmp_req;
   free(file->buf);
+  while(file->wait_queue->head != NULL)
+  {
+    S_dequeue(file->wait_queue, (void**) &tmp_req);
+    free(tmp_req->path);
+    if(tmp_req->buf != NULL)
+    {
+      free(tmp_req->buf);
+    }
+    free(tmp_req);
+  }
   free(file->wait_queue);
   free(file);
 }
