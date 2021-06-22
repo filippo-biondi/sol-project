@@ -1,13 +1,11 @@
-CC		=  gcc
-CFLAGS	  	+= -std=c99 -Wall -g -pthread
+CC		    =  gcc
+CFLAGS	  = -std=c99 -Wall -pthread
 INCLUDES	= -I ./include
 LDFLAGS 	= -Wl,-rpath,./lib -L ./lib
 
-# aggiungere qui altri targets
 TARGETS		= ./bin/client ./bin/server
 
 .PHONY: all clean cleandest cleanall test1 test2
-.SUFFIXES: .c .h .a. so
 
 all: $(TARGETS)
 
@@ -35,8 +33,8 @@ all: $(TARGETS)
 ./lib/libconn_supp.so: ./obj/conn_supp.o
 	$(CC) $(CFLAGS) -shared -o $@ $<
 
-./bin/server: ./obj/server.o ./obj/worker_routine.o ./obj/server_op.o ./obj/signal_handler.o ./lib/libshared_queue.a ./lib/libicl_hash.a
-	$(CC) $(CFLAGS) ./obj/server.o ./obj/worker_routine.o ./obj/server_op.o ./obj/signal_handler.o -o $@ -L ./lib -lshared_queue -licl_hash
+./bin/server: ./obj/server.o ./obj/worker_routine.o ./obj/signal_handler.o ./lib/libshared_queue.a ./lib/libicl_hash.a ./lib/libserver_op.a
+	$(CC) $(CFLAGS) ./obj/server.o ./obj/worker_routine.o  ./obj/signal_handler.o -o $@ -L ./lib -lshared_queue -licl_hash -lserver_op
 
 ./obj/server.o: ./src/server.c ./include/server_lib.h
 	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
@@ -61,7 +59,10 @@ all: $(TARGETS)
 
 ./lib/libicl_hash.a: ./obj/icl_hash.o
 	ar rvs $@ $<
-	
+
+./lib/libserver_op.a: ./obj/server_op.o
+	ar rvs $@ $<
+
 test1: $(TARGETS)
 	chmod +x ./test1.sh
 	./test1.sh
