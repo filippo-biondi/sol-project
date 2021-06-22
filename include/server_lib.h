@@ -15,6 +15,33 @@
 #define DEFAULT_MAX_N_FILE 1000
 #define DEFAULT_SOCKET "socket"
 
+#define WORKER_MALLOC(ptr, size) \
+if((ptr = malloc(size)) == NULL) \
+{                                \
+  pthread_exit(NULL);            \
+}                                \
+
+#define MALLOC_BUF(ptr, size)    \
+if((ptr = malloc(size)) == NULL) \
+{                                \
+  free(path);                    \
+  pthread_exit(NULL);            \
+}                                \
+
+#define MALLOC_OP(ptr, size)     \
+if((ptr = malloc(size)) == NULL) \
+{                                \
+  WRITER_UNLOCK                  \
+  return -1;                     \
+}                                \
+
+#define MALLOC_OP_R(ptr, size)   \
+if((ptr = malloc(size)) == NULL) \
+{                                \
+  READER_UNLOCK                  \
+  return -1;                     \
+}                                \
+
 #define SEND_FIRST_MESSAGE(message)                                                  \
 if(write(fd, &message, sizeof(struct firstmessage)) !=  sizeof(struct firstmessage)) \
 {                                                                                    \
@@ -66,13 +93,13 @@ byte_read = 0;                                                            \
 errno = 0;                                                                \
 while((byte_read += read(fd, buf + byte_read, size - byte_read)) != size) \
 {                                                                         \
-  if(errno != 0)                                                          \
+  if(errno != 0 || byte_read == 0)                                        \
   {                                                                       \
     break;                                                                \
   }                                                                       \
 }                                                                         \
-byte_read = 0;                                                            \
-if(errno != 0)                                                            \
+                                                                          \
+if(errno != 0 || byte_read == 0)                                          \
 {                                                                         \
   printf("Invalid message\n");                                            \
   response.op = 'b';                                                      \
@@ -82,6 +109,7 @@ if(errno != 0)                                                            \
   SEND_FIRST_MESSAGE(response)                                            \
   break;                                                                  \
 }                                                                         \
+byte_read = 0;                                                            \
   
 struct saved_file
 {
